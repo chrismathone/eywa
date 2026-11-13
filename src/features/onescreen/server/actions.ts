@@ -122,7 +122,8 @@ const VIDEO_DUE_CHANGED_ERROR = "영상 숙제 마감이 고른 것과 달라져
 /** 글에 적힌 영상 숙제 마감이 저장한 마감과 다르다(원장 2026-10-28, video-homework/due-text-check.ts) — 글만 고친 마감은 사이트·미수행 판정과 갈린다. */
 const VIDEO_DUE_TEXT_MISMATCH_ERROR = "글에 적힌 영상 숙제 마감이 정한 마감과 달라 보내지 않았습니다(저장은 했습니다) — 글을 고치지 말고 영상 숙제 '기한'(7일 · 다음 수업)을 바꾼 뒤 자동작성을 다시 눌러 주세요";
 const VIDEO_HW_CANCELLED_ERROR = "이 영상 숙제는 영상 제출 현황에서 취소돼 '없음'으로 되돌렸고, 보내지 않았습니다(저장은 했습니다) — 멘트에 영상 숙제 안내가 있으면 고친 뒤 다시 보내 주세요";
-import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass } from "./send-class";
+import { classBoardLiveForStudent, explainBoardMissing, resolveMakeupSendClass, makeupDeliveryWorkerReady } from "./send-class";
+import { makeupDeliveryOnSave, MAKEUP_DELIVERY_UPDATE_REQUIRED } from "../makeup-delivery";
 import { captureReportJj } from "./jj-capture";
 import type { OneScreenStudent, PrevReport } from "../types";
 import { humanizeDbError, logDbError, explainDbError } from "@/lib/supabase/db-error";
@@ -219,6 +220,8 @@ export type SaveLessonReportInput = {
    * 칸도 함께 옮긴다) — 옛 탭이 '보낼 반'만 바꾸던 길을 새 규칙으로 흡수한다.
    */
   classnoteClassId?: string | null;
+  /** 발송할 반만 선택한다. 보강 반(makeupClassId)과 출결은 그대로 둔다. */
+  deliveryClassId?: string | null;
 };
 
 /**
@@ -237,6 +240,7 @@ export async function saveLessonReport(
   warning?: string;
   /** 실제로 저장된 보강 앵커(`makeup_class_id`) — 서버가 확인한 값(발송의 '보낼 반' 판정이 이 값을 쓴다). */
   makeupClassId?: string | null;
+  deliveryClassId?: string | null;
   /**
    * 보고서와 출결 칸은 저장됐지만 **보강 기록 반영이 남았다** — 화면이 저장 성공과 나눠 알린다(되돌리지 않는다, 다시 보내지 않는다).
    * 평소엔 없다. 보강 칸을 세우거나 옮긴 저장에서만 온다(makeup-anchor-cells.ts).
@@ -325,8 +329,8 @@ export async function saveLessonReport(
     // 영상 과제 작성자 판정 재료(지금 값)도 합승한다 — 값을 실은 저장이고 칸이 확인됐을 때만(#95).
     .select(
       (mentReady
-        ? "id, classnote_status, classnote_sent_at, makeup_class_id, created_by, notes, ment_source"
-        : "id, classnote_status, classnote_sent_at, makeup_class_id, created_by") + (videoHwReady ? ", video_homework" : "")
+        ? "id, classnote_status, classnote_sent_at, makeup_class_id, classnote_class_id, created_by, notes, ment_source"
+        : "id, classnote_status, classnote_sent_at, makeup_class_id, classnote_class_id, created_by") + (videoHwReady ? ", video_homework" : "")
         // 영상 숙제 마감(원장 2026-10-15)도 같은 사전 조회에 합승 — '다음 수업'으로 이미 정한 날짜는 다시 계산하지 않는다(due-write.ts).
         + (videoHwReady && videoDueReady ? ", video_homework_due" : ""),
     )
@@ -362,6 +366,7 @@ export async function saveLessonReport(
         classnote_status: string | null;
         classnote_sent_at?: string | null;
         makeup_class_id?: string | null;
+        classnote_class_id?: string | null;
         created_by?: string | null;
         notes?: string | null;
         ment_source?: string | null;
@@ -392,7 +397,7 @@ export async function saveLessonReport(
   const keptVideoHw = ownerKept ?? (cancelKept ? { kept: false } : null);
 
   /**
-   * 🔴 보강 앵커(`makeup_class_id`) — **보고서 반 = 출석부 반 = 발송 반**의 단일 소스(원장 2026-09-30, [`makeup-anchor.ts`](../makeup-anchor.ts)).
+   * 보강 앵커(`makeup_class_id`)는 실제 수업·출결 반이다. 전달 경로 선택으로 바꾸지 않는다.
    *  · 클라가 준 반 id를 그대로 믿지 않는다 — 받을 반 = 담당 반 ∪ 학생이 다니는 반 · 같은 과목 · 종강 전(`acceptMakeupAnchor`,
    *    원장 결정 2: 위임 없이 남의 반 학생을 대신 보강하면 **학생의 원래 반**으로).
    *  · 받을 수 없으면 **저장 오류**다(예전엔 조용히 옛 값으로 두어 화면과 DB가 갈렸다 — C3).
@@ -505,9 +510,9 @@ export async function saveLessonReport(
         homework_score: normalizeNoneMarker(input.homeworkScore),
         // 보강 행일 때만 앵커를 남긴다(정규 행에 들어가면 필터가 엉킨다). 미지정('전체'에서 추가)은 null.
         makeup_class_id: makeupAnchor,
-        // 🔴 보강 행의 '보낼 반'(0303a)은 앵커의 **복사본**이다 — 따로 정하지 않는다(발송 반 = 보고서 반, 원장 2026-09-30).
-        //    이미 어딘가 게시된 행(`classnote_sent_at`)은 다시 적지 않는다 — 회수가 그 기록으로 글을 찾는다.
-        ...(isMakeupRow && makeupAnchor && !priorRow?.classnote_sent_at ? { classnote_class_id: makeupAnchor } : {}),
+        // 같은 수업을 다시 저장하면 선택한 전달 반을 보존한다. 수업 반 변경 때만 기본 경로를 새 앵커로 맞춘다.
+        // 게시된 행은 경로를 다시 적지 않는다 — 회수가 그 기록으로 글을 찾는다.
+        ...(isMakeupRow && makeupAnchor && !priorRow?.classnote_sent_at ? { classnote_class_id: makeupDeliveryOnSave({ anchor: makeupAnchor, priorAnchor, priorDelivery: priorRow?.classnote_class_id ?? null }) } : {}),
         daily_test: input.dailyTest || null,
         check_test: input.checkTest || null,
         attitude: input.attitude || null,
@@ -546,7 +551,7 @@ export async function saveLessonReport(
   if (error || !data) {
     // 먼저 바꿔 둔 반(claimMakeupAnchorChange)을 되돌린다 — 저장이 안 됐는데 반만 바뀌면 칸과 갈린다.
     if (priorRow && makeupAnchor && makeupAnchor !== priorAnchor)
-      await claimMakeupAnchorChange({ tenantId: user.tenantId, reportId: priorRow.id, from: makeupAnchor, to: priorAnchor }).catch(() => undefined);
+      await claimMakeupAnchorChange({ tenantId: user.tenantId, reportId: priorRow.id, from: makeupAnchor, to: priorAnchor, deliveryClassId: priorRow.classnote_class_id }).catch(() => undefined);
     return { ok: false, error: error?.message ?? "보고서 저장에 실패했습니다" };
   }
 
@@ -661,6 +666,7 @@ export async function saveLessonReport(
         subject: input.subject || LEGACY_REPORT_SUBJECT,
         anchor: makeupAnchor,
         priorAnchor,
+        priorDelivery: priorRow?.classnote_class_id,
         move: anchorMove,
         ownerId: owner?.id ?? null,
         via: "report_save",
@@ -755,6 +761,7 @@ export async function saveLessonReport(
     id: data.id,
     shareToken: data.share_token,
     makeupClassId: makeupAnchor,
+    deliveryClassId: makeupDeliveryOnSave({ anchor: makeupAnchor, priorAnchor, priorDelivery: priorRow?.classnote_class_id ?? null }),
     ...(warning ? { warning } : {}),
     ...(keptVideoHwFinal ? { keptVideoHomework: keptVideoHwFinal.kept } : {}),
     // 장부에서 취소된 숙제라 '없음'을 지켰다 — 화면은 값을 되돌리고 그 줄의 맞춘 시각을 이 응답 시각으로 옮긴다(다시 켜면 받는다).
@@ -806,6 +813,7 @@ export async function saveAndQueueClassnote(
   defaultClassId?: string | null;
   /** status="needs_class"일 때 — 보강 추가한 반인데 이 학생의 반 보드가 없어 다른 반으로 가야 한다(경고 한 줄). */
   makeupClassName?: string | null;
+  deliveryOnly?: boolean;
   /** status="board_hold"·"board_hold_recheck"일 때 — 반 보드 배정이 보류된 사유 문장(강사뷰 사전의 `{reason}`). */
   boardHoldReason?: string;
 }> {
@@ -1166,11 +1174,10 @@ export async function saveAndQueueClassnote(
   }
 
   /**
-   * 반별 발송(ClassNote 모듈 켜짐 · 수학은 늘 반별 — 옛 '수학 발송 경로' 설정은 2026-11-05에 없앰) — 🔴 원장 2026-09-30: **보고서 반 = 출석부 반 = 발송 반**.
+   * 반별 발송(ClassNote 모듈 켜짐 · 수학은 늘 반별).
    *  · 정규 보고서 = 보고서 반의 반 보드로만. 이 학생이 받을 반 보드가 없으면 **막고 안내**한다 — 다른 반으로 보내지 않는다
    *    (원장 결정 4 · 반 보드 동기화가 필요하다). 예전엔 다른 반을 고르게 했다(C5).
-   *  · 보강 보고서 = **보강 반**(저장이 확인해 적은 `makeup_class_id`)의 반 보드로만. 보드가 없으면 반을 고르게 하고, 고른 반은
-   *    다시 저장을 지나 **새 보강 반**이 된다(출석부 칸도 함께 옮겨진다). '보낼 반'만 따로 적는 길은 없앴다(C1·C9).
+   *  · 보강 보고서 = 보강 반을 유지하고 검증된 전달 반으로 보낸다. 전달 반이 없으면 보강 반을 사용하며, 못 보내면 선택창을 연다.
    *  · 반 정보가 없는 정규 행(옛 과목 단위 행)은 반별로 보낼 곳이 없다 — 막는다.
    * 🔴 확인 실패는 **발송하지 않는다**(fail-closed) — 모르는 채로 보내면 워커가 막거나 엉뚱한 곳을 시도한다.
    */
@@ -1212,7 +1219,7 @@ export async function saveAndQueueClassnote(
     } else {
       let pick: Awaited<ReturnType<typeof resolveMakeupSendClass>>;
       try {
-        pick = await resolveMakeupSendClass(user.tenantId, input.studentId, reportDate, input.subject, saved.makeupClassId ?? null);
+        pick = await resolveMakeupSendClass(user.tenantId, input.studentId, reportDate, input.subject, saved.makeupClassId ?? null, input.deliveryClassId ?? saved.deliveryClassId);
       } catch {
         await unqueue();
         return checkFail;
@@ -1227,8 +1234,9 @@ export async function saveAndQueueClassnote(
           candidates: pick.candidates,
           defaultClassId: pick.defaultId,
           makeupClassName: pick.makeupClass?.name || null,
+          deliveryOnly: !!saved.makeupClassId,
           error: pick.makeupClass
-            ? `보강 반(${pick.makeupClass.name || "이름 없음"})에 이 학생의 ClassNote 반 보드가 없습니다 — 보강 반을 바꿔 주세요(저장은 됐습니다)`
+            ? `보강 반(${pick.makeupClass.name || "이름 없음"})으로는 이 학생의 보고서를 보낼 수 없습니다 — 반 설정과 학생의 ClassNote 반 보드 연결을 확인해 주세요(저장은 됐습니다)`
             : "보강 반을 골라 주세요 — 저장은 됐습니다",
           ...warn,
         };
@@ -1238,7 +1246,11 @@ export async function saveAndQueueClassnote(
         await unqueue();
         return { ok: false, id: saved.id, shareToken: saved.shareToken, status: "no_class", error: NO_SEND_CLASS_ERROR, ...warn };
       }
-      // '보낼 반'(0303a)은 저장이 이미 보강 반으로 적었다(복사본) — 여기서 따로 적지 않는다.
+      if (pick.via === "delivery" && !(await makeupDeliveryWorkerReady(user.tenantId))) {
+        await unqueue();
+        return { ok: false, id: saved.id, shareToken: saved.shareToken, error: MAKEUP_DELIVERY_UPDATE_REQUIRED, ...warn };
+      }
+      // 실제 전달 경로는 아래 큐 적재와 같은 문장으로 확정한다. 보강 출결은 이동하지 않는다.
       sendClassPick = { classId: pick.classId, via: pick.via };
     }
   }
@@ -1257,23 +1269,28 @@ export async function saveAndQueueClassnote(
   // 🔴 **조건부 적재(compare-and-set)** — 맨 위의 processing·success 확인과 이 줄 사이에 워커가 첫 발송을 끝낼 수 있다.
   //    9/29 박세욱: 발송 → 첨부 추가 → 0.3초 뒤 다시 발송 — 그 틈에 워커가 첫 글을 올렸는데 이 update가 success를 덮고
   //    queued로 되돌려 **같은 글이 한 번 더** 올라갔다(ClassNote 글은 지울 수 없다). 그새 워커가 집었거나 보냈으면 0행.
-  const { data: queuedRows, error } = await supabase
+  let queueQuery = supabase
     .from("lesson_reports")
     .update({
       classnote_status: allowed ? "queued" : "too_old",
       classnote_queued_at: allowed ? new Date().toISOString() : null,
       classnote_retry_count: 0,
       classnote_error: null,
+      ...(sendClassPick ? { classnote_class_id: sendClassPick.classId } : {}),
     })
     .eq("id", saved.id)
-    .or(CLASSNOTE_REQUEUE_OK)
-    .select("id");
+    .eq("tenant_id", user.tenantId)
+    .or(CLASSNOTE_REQUEUE_OK);
+  queueQuery = saved.makeupClassId ? queueQuery.eq("makeup_class_id", saved.makeupClassId) : queueQuery.is("makeup_class_id", null);
+  const { data: queuedRows, error } = await queueQuery.select("id");
   if (error) return { ok: false, error: humanizeDbError(error.message, "발송 요청"), ...warn };
   if (!queuedRows?.length) {
     // 그새 워커가 집었거나(processing) 이미 보냈다(success) — 다시 올리지 않는다. 화면은 그 상태를 그대로 보여 준다.
     const { data: now } = await supabase.from("lesson_reports").select("classnote_status").eq("id", saved.id).maybeSingle();
     const st = (now?.classnote_status as string | null) ?? null;
-    return { ok: true, id: saved.id, shareToken: saved.shareToken, status: st === "processing" ? "processing" : "already_sent", ...warn };
+    if (st === "processing" || st === "success")
+      return { ok: true, id: saved.id, shareToken: saved.shareToken, status: st === "processing" ? "processing" : "already_sent", ...warn };
+    return { ok: false, id: saved.id, shareToken: saved.shareToken, error: "보강 기록이 그새 바뀌어 발송하지 않았습니다 — 새로고침 뒤 다시 보내 주세요", ...warn };
   }
   /**
    * 🔴 **학부모에게 나가는 순간**이라 반드시 남긴다(ClassNote는 게시글 수정·삭제가 없어 되돌릴 수 없다).
@@ -1976,8 +1993,8 @@ export async function generateReportComment(
     if (sections.length === 0) return { ok: false, error: "생성할 내용이 없습니다" };
 
     // 통합 1회 호출 — 멘트(·추세)를 한 번에 {comment|p1|p2, trend}로 생성. temp 0.3·reasoning minimal(Solar 후보정) 적용.
-    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 5.5 — 2026-10-16 4.5에서 올림 / 키 죽으면 DeepSeek flash 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
-    // ⚠️ 이 tier 지정은 **멘트 호출에만** — 다른 AI는 balanced(Sonnet 5.5 · 기능별 고정은 model-pins.ts). Haiku도 Anthropic 키가 살아야 동작(아니면 DeepSeek).
+    // 보고서 멘트·추세는 **fast tier**(Claude Haiku 5.5 — 2026-10-16 4.5에서 올림 / 키가 막히면 ChatGPT Luna 폴백) — 사실 서술형이라 Sonnet 불요, 비용 절감(원장 결정 2026-07-14).
+    // ⚠️ 이 tier 지정은 **멘트 호출에만** — 다른 AI는 balanced(Sonnet 5.5 · 기능별 고정은 model-pins.ts). Anthropic 키가 없으면 ChatGPT로 넘어간다.
     const { data } = await generateJSON<Record<string, unknown>>({
       prompt: assembleCombined(sections),
       maxTokens: mentMaxTokens(safeInput),
@@ -1986,7 +2003,9 @@ export async function generateReportComment(
       meta: { feature: "classnote_ment", tenantId: user.tenantId },
       ...MENT_AI_TUNING,
     });
-    const res = readMentResponse(data, mode, trendInput);
+    const res = readMentResponse(data, mode, trendInput, [safeInput.specialNote, safeInput.classNotice, lessonMemo].filter((x): x is string => !!x));
+    if (res.leaks.length)
+      console.warn(JSON.stringify({ level: "warn", scope: "generateReportComment.leak", dropped: res.leaks, message: "AI 혼잣말·찌꺼기 문장을 학부모 글에서 뺐음" }));
     if (!res.comment) return { ok: false, error: "빈 응답" };
     const body = prependParentAddress(appendVideoReceiptComment(res.comment, videoReceipt), parentAddress);
     // 시범 대상 — 항목별 글(진도 → 테스트 → 태도 → 과제 → 이해도(AI) → 오늘 과제 → 선생님 한마디).

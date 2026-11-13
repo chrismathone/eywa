@@ -308,7 +308,7 @@ describe("학원 비서 권한(assistant · 원장 2026-11-09 *\"기본 디폴�
     expect(MENU_ACCESS.assistant).toEqual(Object.fromEntries(SYSTEM_ROLES.map((role) => [role, role === "master" ? "full" : "none"])));
   });
 
-  it("🔴 칸은 전체·없음만 — 비서는 지점 자료 전부를 읽어 '담당'·'읽기'로 좁힐 수 없다(좁은 값이 적혀도 실제는 '전체'로 열린다)", () => {
+  it("🔴 칸은 전체·없음만 — 비서 칸은 쓰나 마나다(읽는 자료는 묻는 사람의 권한 범위 · 좁은 값이 적혀도 실제는 '전체'로 열린다)", () => {
     expect(isOnOffMenu("assistant")).toBe(true);
     for (const role of SYSTEM_ROLES) {
       expect(isPermissionLocked("assistant", role, "scoped"), role).toBe(true);

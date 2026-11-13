@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getCurrentSuperAdmin } from "@/lib/auth/super-admin";
 import { landingPath } from "@/lib/auth/teacher-home";
+import { getParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import { GET } from "./route";
 
 vi.mock("next/navigation", () => ({
@@ -23,6 +24,7 @@ describe("/home login landing", () => {
     vi.clearAllMocks();
     vi.mocked(getCurrentUser).mockResolvedValue(null);
     vi.mocked(getCurrentSuperAdmin).mockResolvedValue(null);
+    vi.mocked(getParentViewer).mockResolvedValue(null);
   });
 
   it("sends the dedicated admin account to /admin without a tenant user row", async () => {
@@ -44,5 +46,15 @@ describe("/home login landing", () => {
 
   it("sends an anonymous visitor to login", async () => {
     await expect(GET(request)).rejects.toThrow("redirect:/login");
+  });
+
+  it("학부모 신원은 이용 가능 상태와 섞지 않고 /parent로 보내 안내 화면에 닿게 한다", async () => {
+    vi.mocked(getParentViewer).mockResolvedValue({
+      parentAccountId: "p1",
+      tenantId: "t1",
+      displayName: "보호자",
+      children: [],
+    });
+    await expect(GET(request)).rejects.toThrow("redirect:/parent");
   });
 });

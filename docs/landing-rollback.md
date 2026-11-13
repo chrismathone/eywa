@@ -58,6 +58,7 @@ git checkout $C -- "src/app/(marketing)"
 
 - (D)가 새로 만든 것 = `_scroll/flagship*.{tsx,css}` · `scene-assistant.tsx` · `scene-player.tsx`(자동 재생) · `dash-mock.tsx` · `strip-cards-c.tsx` · `strip-toggle.tsx` · `public/landing/flagship/**`(위 명령이 지운다). 로그인·`src/data/marketing.ts`는 (D)에서 안 바꿨다.
 - 옛 장면 CSS(`landing-*.css`)는 (D)에서 고치지 않았다 — 그 위에 `flagship-scenes.css`로 덮었다. `landing-motion.tsx`는 한 줄(`.pin:not([data-play])` — 자동 재생 장면 제외)만 바꿨다. 위 checkout이 둘 다 (C)로 되돌린다.
+- 2026-11-12: (D)의 색감을 라임 #ddfc68 → 노랑 #ffd25b로 바꿨다(커밋 `2e439d847` · 히어로 사진은 `flagship-product-yellow.webp`). 같은 날 진입점에서 안 닿던 옛 파일(`landing-hero.tsx`·`dashboard-mock.tsx`·`landing-dash.css`·옛 히어로 사진 `flagship-product.webp`)을 지웠다. 라임으로만 되돌릴 땐 색 커밋을 revert하고 옛 사진을 `git checkout 2e439d847^ -- public/landing/flagship/flagship-product.webp`로 살린다. (C)로 되돌리는 위 절차는 `git checkout $C`가 지운 파일까지 다시 살리므로 그대로다.
 
 ### 스크롤 판(C)이 새로 만든 것 — 되돌릴 때 지우는 것
 

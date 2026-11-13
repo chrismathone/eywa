@@ -220,6 +220,17 @@ describe("회차 단가 선택", () => {
     expect(screen.queryByLabelText("EiE학생 회당 단가")).not.toBeInTheDocument();
   });
 
+  it("EiE 구분이 꺼진 지점에 남은 월정액 반만 반 머리에 경고한다", () => {
+    const { rerender } = render(<SessionTermGroups groups={[group("EiE", 270000)]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" eieEnabled={false} />);
+    expect(screen.getByRole("status")).toHaveTextContent("이 반은 월정액으로 확정됩니다");
+
+    rerender(<SessionTermGroups groups={[group("EiE", 270000)]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" eieEnabled />);
+    expect(screen.queryByText("이 반은 월정액으로 확정됩니다")).not.toBeInTheDocument();
+
+    rerender(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" eieEnabled={false} />);
+    expect(screen.queryByText("이 반은 월정액으로 확정됩니다")).not.toBeInTheDocument();
+  });
+
   it("회차 없이 반 단가만 입력하면 미확정 입력칸과 예상금액만 바뀐다", () => {
     render(<SessionTermGroups groups={[group("수학")]} catalog={DEFAULT_SESSION_PRICES} period="2026-09" />);
     fireEvent.change(screen.getByLabelText("수학학생 확정 회차"), { target: { value: "7" } });

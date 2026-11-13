@@ -9,6 +9,7 @@
  *    AI 초안 ↔ 선생님이 실제로 보낸 글 쌍은 **고치는 습관** 예시다 — 사실의 출처가 아니다(프롬프트가 그렇게 말한다).
  * 🔑 예시 글의 학생 이름은 `○○`로 가린다 — 다른 학생 이름이 이 학생 글에 새지 않게. 생성 뒤에도 한 번 더 본다(`checkLoveNote`).
  */
+import { hasMentLeak } from "./ment-leak";
 
 export const LOVE_NOTE_HEAD = "■ 사랑의 한마디";
 
@@ -179,7 +180,9 @@ export function parseLoveNote(data: unknown): string | null {
 export function checkLoveNote(
   note: string,
   p: { facts: LoveNoteFacts; studentName: string; otherNames: readonly string[] },
-): { ok: true } | { ok: false; reason: "number" | "name" } {
+): { ok: true } | { ok: false; reason: "number" | "name" | "leak" } {
+  // 혼잣말·지시 되받기·글자 그대로의 줄바꿈 기호가 든 초안은 쓰지 않는다(원장 2026-11-12, `ment-leak.ts`).
+  if (/\\[nrt]/.test(note) || note.split(/(?<=[.!?])\s+|\n/).some((sen) => hasMentLeak(sen))) return { ok: false, reason: "leak" };
   const factText = loveNoteFactLines(p.facts).join(" ");
   const factNums = new Set(factText.match(/\d+/g) ?? []);
   for (const n of note.match(/\d+/g) ?? []) if (!factNums.has(n)) return { ok: false, reason: "number" };

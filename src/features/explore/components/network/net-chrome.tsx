@@ -19,6 +19,7 @@ export function NetToolbar({
   onFit,
   onCenter,
   onWide,
+  bundle,
 }: {
   head: NetHead;
   view: NetViewMode;
@@ -29,6 +30,8 @@ export function NetToolbar({
   onFit: () => void;
   onCenter: () => void;
   onWide: () => void;
+  /** '묶기' 켬·끔(지식그래프만 넘긴다 · 없으면 단추가 없다) — 개별 기록 판에서만(요약 판은 이미 영역끼리 모은다). */
+  bundle?: { on: boolean; onChange: (b: boolean) => void };
 }) {
   return (
     <div className={styles.tools} data-net-chrome="">
@@ -53,6 +56,18 @@ export function NetToolbar({
             주체별 요약
           </button>
         </div>
+        {bundle ? (
+          <button
+            type="button"
+            className={styles.btn}
+            aria-pressed={bundle.on && view === "records"}
+            disabled={view !== "records"}
+            title={view === "records" ? "묶음 사이 기록 관계를 한 줄로 모아 그립니다 · 굵을수록 관계가 많습니다" : "개별 기록 보기에서 씁니다"}
+            onClick={() => bundle.onChange(!bundle.on)}
+          >
+            묶기
+          </button>
+        ) : null}
         <div className={`${styles.seg} ${styles.zoom}`} role="group" aria-label="확대">
           <button type="button" title="축소" onClick={() => onZoom(0.8)}>
             −

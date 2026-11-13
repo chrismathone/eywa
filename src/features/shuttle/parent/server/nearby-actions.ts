@@ -1,6 +1,7 @@
 "use server";
 
 import { reportError } from "@/lib/observability/report-error";
+import { PARENT_PORTAL_UNAVAILABLE_MESSAGE, parentPortalAvailable } from "./parent-availability";
 import { getParentViewer } from "./parent-viewer";
 import { isShuttleAdmin } from "../../server/access";
 import { findWalkRoute, type WalkRoute } from "./walk-route";
@@ -9,9 +10,11 @@ import { findWalkRoute, type WalkRoute } from "./walk-route";
  * 🔒 쓸 수 있는 사람 = 학부모(탭 4) **또는** 셔틀 관리자(원장·관리자·총괄 — 셔틀 '가까운 노선 찾기' 면, 2026-10-26).
  * 정류장 이름·좌표만 다루고 학생 정보는 없다. 화면 게이트와 같은 판정(#77).
  */
-async function canUseNearby(): Promise<boolean> {
-  if (await getParentViewer()) return true;
-  return isShuttleAdmin();
+async function nearbyDenial(): Promise<string | null> {
+  const viewer = await getParentViewer();
+  if (viewer) return (await parentPortalAvailable(viewer)) ? null : PARENT_PORTAL_UNAVAILABLE_MESSAGE;
+  // 직원 쪽은 종전 문구 그대로(같은 '가까운 노선 찾기' 화면을 쓰는 직원에게 학부모용 안내를 보이지 않는다 — 검토 2026-11-12).
+  return (await isShuttleAdmin()) ? null : "로그인이 필요합니다";
 }
 
 export type PlaceHit = { name: string; address: string; lat: number; lng: number };
@@ -27,7 +30,8 @@ export async function searchNearbyPlace(
   query: string,
   near: { lat: number; lng: number },
 ): Promise<{ hits: PlaceHit[] } | { error: string }> {
-  if (!(await canUseNearby())) return { error: "로그인이 필요합니다" };
+  const denied = await nearbyDenial();
+  if (denied) return { error: denied };
   const q = query.trim().slice(0, 60);
   if (!q) return { hits: [] };
   const key = process.env.KAKAO_REST_API_KEY;
@@ -67,7 +71,8 @@ export async function walkRoutesFrom(
   from: { lat: number; lng: number },
   targets: { id: string; lat: number; lng: number }[],
 ): Promise<{ routes: Record<string, WalkRoute> } | { error: string }> {
-  if (!(await canUseNearby())) return { error: "로그인이 필요합니다" };
+  const denied = await nearbyDenial();
+  if (denied) return { error: denied };
   if (!process.env.TMAP_APP_KEY && !process.env.KAKAO_REST_API_KEY) return { error: "길찾기가 아직 준비되지 않았어요" };
   const ok = (p: { lat: number; lng: number }) => Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
   if (!ok(from)) return { error: "위치를 확인하지 못했어요" };

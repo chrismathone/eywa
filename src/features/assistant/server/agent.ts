@@ -20,6 +20,7 @@ import type { AskStep, StepKind, StepTable } from "../protocol";
 import type { AssistantTableDoc } from "../catalog/types";
 import { clipText } from "../text";
 import { checkAssistantSql } from "./sql-gate";
+import { hiddenColumnsUsed } from "../scope";
 import { buildSystemPrompt, catalogLines, pastAnswerText, questionMessage, type PastTurn } from "./prompt";
 import {
   addDays,
@@ -88,6 +89,15 @@ export type AssistantDb = {
   /** 비서가 읽을 수 있는 보기 이름(이 지점 · 비밀 칸을 뺀). */
   views(): Promise<ReadonlySet<string>>;
   describe(tables: string[]): Promise<Array<{ table: string; columns: Array<{ name: string; type: string }> }>>;
+  /**
+   * 묻는 사람의 권한 범위 밖 보기 → 거절 안내('○○ 권한이 있어야 볼 수 있는 자료입니다' · s2_0096). 없으면(시험) 범위 제한 없음.
+   * 검사기가 이 이름을 '없는 표' 대신 권한 안내로 돌려보낸다 — 0건으로 답하지 않게(Codex 합의 7).
+   */
+  denied?(): Promise<ReadonlyMap<string, string>>;
+  /** 이 표에서 묻는 사람에게 가린 칸(값은 DB가 null로 준다 · 표 구조에서도 숨긴다). */
+  hiddenColumns?(table: string): ReadonlySet<string>;
+  /** 볼 수 있는 보기 → 칸 이름(가린 칸 포함) — 검사기가 `별칭.이름`이 진짜 칸인지 가른다(함수를 칸처럼 부르는 꼴 막기). */
+  viewColumns?(): Promise<ReadonlyMap<string, ReadonlySet<string>>>;
   /** 검사를 통과한 SQL을 읽기 전용으로 돌린다. 실패는 `AssistantQueryError`(또는 한국어 Error)로 던진다. */
   run(sql: string): Promise<{ columns: string[]; rows: Row[]; rowCount: number; truncated: boolean; ms: number }>;
 };
@@ -115,6 +125,8 @@ export type AgentInput = {
   contextWrapTokens?: number;
   /** 원장이 누른 '여기서 끝내고 결과 보기' — 끊기면 더 조회하지 않고 지금까지의 결과로 보고서를 쓴다(`signal`은 질문을 버리는 멈춤). */
   wrapSignal?: AbortSignal;
+  /** 읽은 보기·칸 이름 누적기(부르는 쪽이 들고 있다) — 루프가 던져도(멈춤·오류) 저장 표지에 남는다(적대 리뷰 2026-11-12). */
+  used?: { tables: Set<string>; columns: Set<string> };
 };
 
 type WrapReason = "user" | "time" | "context";
@@ -135,7 +147,8 @@ const WRAP_DETAIL: Record<WrapReason, string> = {
  * `checks` = 비서 의견의 확인 지표(조회문 원문 포함 · 의견 순번 `itemNo` = advice 블록 items의 자리)와 기준값 — 의견 표에만 저장한다
  * (보고서 블록에서는 뺐다 — 조회문을 화면·대화 저장본으로 보내지 않는다). `askedOn` = 질문일(한국 날짜) — 기준값 기간·다시 잴 날의 기준.
  */
-export type AgentResult = { report: SettledReport; queries: QueryResult[]; checks: AdviceCheckResult[]; askedOn: string };
+/** `tables`·`columns` = 이 답이 읽은 보기와 조회문에 이름으로 나온 칸(조회 · 전수 조회 · 확인 지표) — 저장 표지(필요 묶음 키 · s2_0096)의 재료. */
+export type AgentResult = { report: SettledReport; queries: QueryResult[]; checks: AdviceCheckResult[]; askedOn: string; tables: string[]; columns: string[] };
 /** 확인 지표 기준값 재기 전체의 상한 — 보고서가 이미 나온 뒤라 답을 늦추지 않는다(넘으면 남은 지표는 재지 않고 뺀다). */
 const CHECK_BUDGET_MS = 30_000;
 
@@ -220,9 +233,18 @@ export function resultForModel(r: QueryResult): string {
   return body;
 }
 
-function describeText(docs: readonly AssistantTableDoc[], found: Awaited<ReturnType<AssistantDb["describe"]>>, asked: string[], views: ReadonlySet<string>) {
+function describeText(
+  docs: readonly AssistantTableDoc[],
+  found: Awaited<ReturnType<AssistantDb["describe"]>>,
+  asked: string[],
+  views: ReadonlySet<string>,
+  denied: ReadonlyMap<string, string> = new Map(),
+) {
   const out = asked.map((name) => {
     const live = found.find((f) => f.table === name);
+    // 권한 범위 밖 보기 — 칸·설명을 주지 않고 필요한 권한만 알린다(숨긴 표의 내용·건수는 말하지 않는다 · Codex 합의 7).
+    const blocked = denied.get(name);
+    if (blocked && !views.has(name)) return { table: name, error: `${blocked} — 묻는 분의 권한 밖이라 조회할 수 없습니다` };
     if (!live || !views.has(name)) {
       const near = [...views].filter((v) => v.includes(name) || name.includes(v)).slice(0, 8);
       return { table: name, error: `없는 보기입니다${near.length ? ` — 비슷한 이름: ${near.join(", ")}` : ""}` };
@@ -236,6 +258,17 @@ function describeText(docs: readonly AssistantTableDoc[], found: Awaited<ReturnT
     };
   });
   return JSON.stringify(out);
+}
+
+/**
+ * 조회가 묻는 사람에게 가린 칸(DB가 null로 준다 · s2_0096)을 이름으로 썼으면 AI에게 한 줄 알린다 — 비어 나온 값을 '없음'으로 쓰지 않게.
+ * 별칭·표 구분 없이 칸 이름으로만 본다(넉넉하게 — 다른 표의 같은 이름 칸이어도 알린다).
+ */
+export function hiddenColumnNote(db: Pick<AssistantDb, "hiddenColumns">, tables: readonly string[], columns: readonly string[]): string | null {
+  if (!db.hiddenColumns) return null;
+  const hits = hiddenColumnsUsed(tables, columns, db.hiddenColumns);
+  if (!hits.length) return null;
+  return `⚠️ 권한 밖 칸(${hits.join(", ")})은 묻는 분에게 값이 비어 나옵니다 — 실제로 비어 있는 것이 아닙니다. 이 칸 값은 답에 쓰지 말고, 필요하면 '권한이 있어야 볼 수 있어 확인하지 않았습니다'로 밝히세요.`;
 }
 
 /** 보고서 블록에서 확인 지표(조회문 원문)를 뺀다 — 의견 표에만 둔다(화면·대화 저장본·지난 대화로 보내지 않는다 · 적대 리뷰 2026-11-09). */
@@ -310,8 +343,26 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
 
   const views = await input.db.views();
   if (views.size === 0) throw new AssistantError("조회할 수 있는 자료가 없습니다. 비서 DB 설정을 확인해 주세요");
+  // 권한 범위 밖 보기(s2_0096) — 검사기가 '없는 표' 대신 '○○ 권한이 있어야 볼 수 있는 자료'로 돌려보낸다.
+  const denied = (await input.db.denied?.()) ?? new Map<string, string>();
+  /** 이 답이 읽은 보기·칸 이름 — 저장 표지(필요 묶음 키 · s2_0096)의 재료(조회 · 전수 조회 · 확인 지표). 부르는 쪽이 넘긴 누적기에도 쌓는다(답이 실패해도 남게). */
+  const usedTables = input.used?.tables ?? new Set<string>();
+  const usedColumns = input.used?.columns ?? new Set<string>();
+  const note = (gate: { tables: readonly string[]; columns: readonly string[] }) => {
+    for (const x of gate.tables) usedTables.add(x);
+    for (const x of gate.columns) usedColumns.add(x);
+  };
+  // 보기 칸 목록 — 못 읽으면 검사기의 대비책(이름 목록)으로 간다(질문을 멈추지 않는다).
+  const viewColumns = await input.db.viewColumns?.().catch(() => undefined);
+  const gateSql = (sql: string) => checkAssistantSql(sql, views, denied, viewColumns);
+  /** 전수 조회처럼 검사기를 넘겨주는 자리 — 통과한 조회문의 보기를 저장 표지에 넣는다(실행이 실패해도 넣는다 — 넉넉한 쪽). */
+  const gateAndNote = async (sql: string) => {
+    const gate = await gateSql(sql);
+    if (gate.ok) note(gate);
+    return gate;
+  };
   const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: buildSystemPrompt(catalogLines(input.docs, views)), cache_control: { type: "ephemeral" } },
+    { type: "text", text: buildSystemPrompt(catalogLines(input.docs, views), { limited: denied.size > 0 }), cache_control: { type: "ephemeral" } },
   ];
   const messages: Anthropic.MessageParam[] = [];
   for (const turn of input.history) {
@@ -358,6 +409,8 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
     queries,
     checks,
     askedOn,
+    tables: [...usedTables].sort(),
+    columns: [...usedColumns].sort(),
   });
 
   /**
@@ -374,13 +427,18 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       let gate: Awaited<ReturnType<typeof checkAssistantSql>>;
       try {
         // 대상 자리는 굳힌 명단으로 채운다(s2_0039 · 저장은 틀 그대로 — 다시 잴 때도 같은 명단으로 채운다).
-        gate = await checkAssistantSql(fillTargets(fillWindow(check.sql, from, to), targets), views);
+        gate = await gateSql(fillTargets(fillWindow(check.sql, from, to), targets));
       } catch {
         return "조회문을 검사하지 못했습니다(일시 오류)";
       }
       if (!gate.ok) return `쓸 수 없는 조회입니다 — ${gate.reason}`;
+      // 묻는 분에게 가린 칸(값이 null로 온다)으로는 재지 않는다 — null을 0으로 세어 기준값이 틀린다(적대 리뷰 2026-11-12).
+      const masked = input.db.hiddenColumns ? hiddenColumnsUsed(gate.tables, gate.columns, input.db.hiddenColumns) : [];
+      if (masked.length) return `권한 밖 칸(${masked.join(", ")})을 써서 잴 수 없습니다`;
+      note(gate); // 실행이 실패해도 오류 원문이 그 자료를 담을 수 있다 — 검사를 지난 때 표지에 남긴다
       try {
-        const read = readCheckRow(await input.db.run(gate.sql), check.unit);
+        const ran = await input.db.run(gate.sql);
+        const read = readCheckRow(ran, check.unit);
         return read.ok ? { value: read.value, sample: read.sample } : read.error;
       } catch (error) {
         // 화면·저장본에 남는 단계 설명이라 한국어 요약만(DB 원문 detail은 싣지 않는다 — 일반 조회 단계와 같다 · 재리뷰 2026-11-09).
@@ -602,6 +660,12 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
         return fail(`INVALID_INPUT: target(student·class·teacher)·id(uuid)·name이 필요하고 from·to는 있는 날짜(YYYY-MM-DD)입니다 — ${clipText(JSON.stringify(call.input), 300)}`);
       }
       const { target, id } = parsed.data;
+      // 대상 표(원생·반·직원)가 묻는 분의 권한 밖이면 시작하지 않는다 — 대상 확인 없이 '자료 없음'으로 보고되지 않게(재리뷰 2026-11-12).
+      const targetBlocked = denied.get(TARGET_TABLE[target]);
+      if (targetBlocked && !views.has(TARGET_TABLE[target])) {
+        close(stepId, { state: "error", detail: "권한 밖 대상입니다" });
+        return fail(`${targetBlocked} — 이 대상의 전수 조회는 묻는 분의 권한 밖이라 할 수 없습니다. 볼 수 있는 자료로만 답하고, 보지 못한 부분은 이 권한이 필요하다고 밝히세요.`);
+      }
       const to = parsed.data.to ?? kstYmd(now());
       // 기본 기간 — 원생은 전체(첫 상담부터의 흐름을 본다 · 원장 11-06), 반·강사는 최근 6개월.
       const from = parsed.data.from ?? (target === "student" ? "2000-01-01" : addDays(to, -180));
@@ -615,7 +679,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       // 한 줄짜리 확인 조회(검사기 → 실행기). 일시 오류면 null — 전수 조회 전체를 버리지 않는다(적대 리뷰 2026-11-09).
       const one = async (sql: string) => {
         try {
-          const gate = await checkAssistantSql(sql, views);
+          const gate = await gateAndNote(sql);
           return gate.ok ? (await input.db.run(gate.sql)).rows : null;
         } catch {
           return null;
@@ -656,7 +720,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
         const plan = surveyPlan(target, described, input.docs, { teacherName, withTaughtClasses: taughtClasses > 0 });
         const record: SurveyRecord = { target, id, name, from, to, rows: [], examined: new Set() };
         const surveyStarted = now();
-        record.rows = await runSurvey(input.db, (sql) => checkAssistantSql(sql, views), plan.tables, {
+        record.rows = await runSurvey(input.db, gateAndNote, plan.tables, {
           id,
           from,
           to,
@@ -696,7 +760,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
         return fail("표 구조를 읽지 못했습니다(일시 오류). 한 번 더 시도하거나, 이미 아는 칸으로 조회하세요.");
       }
       close(stepId, { label: "표 구조 확인", tables: known.map(tableChip), detail: `${known.length}개` });
-      return { type: "tool_result", tool_use_id: call.id, content: describeText(input.docs, found, asked, views) };
+      return { type: "tool_result", tool_use_id: call.id, content: describeText(input.docs, found, asked, views, denied) };
     }
     if (call.name === "run_sql") {
       const parsed = RunSqlInput.safeParse(call.input);
@@ -707,7 +771,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       const purpose = parsed.data.purpose;
       let gate: Awaited<ReturnType<typeof checkAssistantSql>>;
       try {
-        gate = await checkAssistantSql(parsed.data.sql, views);
+        gate = await gateSql(parsed.data.sql);
       } catch {
         // 검사기(wasm) 로드 실패 등 — 검사하지 못한 조회는 돌리지 않고 이 도구만 실패로 돌려준다.
         close(stepId, { state: "error", label: `조회문 작성 · ${purpose}`, detail: "조회문을 검사하지 못했습니다" });
@@ -721,6 +785,7 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
       const id = `q${queries.length + 1}`;
       const queryStep = open("query", `조회 ${queries.length + 1} · ${purpose}`, { tables: gate.tables.map(tableChip) });
       try {
+        note(gate); // 실행이 실패해도 오류 원문(값이 실린다)이 AI로 간다 — 검사를 지난 때 표지에 남긴다
         const out = await input.db.run(gate.sql);
         const result: QueryResult = { id, purpose, sql: gate.sql, ...out };
         queries.push(result);
@@ -730,7 +795,8 @@ export async function runAssistantAgent(input: AgentInput): Promise<AgentResult>
         const named = surveys.filter((sv) => gate.sql.includes(sv.id));
         for (const sv of named.length ? named : surveys.slice(-1)) for (const t of gate.tables) sv.examined.add(t);
         close(queryStep, { detail: `${out.truncated ? `${out.rowCount}행 이상` : `${out.rowCount}행`} · ${seconds(out.ms)}` });
-        return { type: "tool_result", tool_use_id: call.id, content: resultForModel(result) };
+        const masked = hiddenColumnNote(input.db, gate.tables, gate.columns);
+        return { type: "tool_result", tool_use_id: call.id, content: masked ? `${resultForModel(result)}\n\n${masked}` : resultForModel(result) };
       } catch (error) {
         const shown = error instanceof Error ? error.message : "조회 오류";
         const forModel = error instanceof AssistantQueryError ? `${error.message} — ${error.detail}` : shown;

@@ -10,6 +10,9 @@ import { BigStat } from "@/components/atoms/big-stat";
 import { Toolbar, ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { AnnualComparison } from "./annual-comparison";
+import { kstDateOf } from "@/lib/date-kst";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { StudentSearchToggle } from "@/features/attendance/components/student-search-box";
 /** 유형·연결 구별이 뜻인 색 = 범주 색(`--cat-*`, 테마가 덮지 않는다). 순서 = 종전 보라·청록·노랑·분홍·파랑. */
@@ -26,17 +29,47 @@ function href(url:unknown){try{const u=new URL(String(url));return u.protocol===
 async function post(input:unknown){const r=await fetch("/api/marketing-archive",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(input)});const d=await r.json();if(!r.ok)throw Error(d.error??"저장하지 못했습니다");return d.record;}
 
 export function ArchiveWorkspace({data,initialView="history"}:{data:ArchiveData;initialView?:string}){
- const router=useRouter();const [tab,setTab]=useState(["history","annual","sources","gaps"].includes(initialView)?initialView:"history"),[year,setYear]=useState("all"),[query,setQuery]=useState(""),[provider,setProvider]=useState(""),[page,setPage]=useState(0),[selected,setSelected]=useState<EventRow|null>(null),[creating,setCreating]=useState<EventDocument|null>(null),[source,setSource]=useState<SourceRow|null>(null),[message,setMessage]=useState(""),[busy,setBusy]=useState(false),[planYear,setPlanYear]=useState(Number(data.today.slice(0,4))+1);
+ const router=useRouter();const [tab,setTab]=useState(["history","annual","sources","gaps"].includes(initialView)?initialView:"history"),[year,setYear]=useState("all"),[query,setQuery]=useState(""),[provider,setProvider]=useState(""),[page,setPage]=useState(0),[selected,setSelected]=useState<EventRow|null>(null),[creating,setCreating]=useState<EventDocument|null>(null),[source,setSource]=useState<SourceRow|null>(null),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+ const [pendingDelete, setPendingDelete] = useState<EventRow | null>(null);
+ const [showDeleted, setShowDeleted] = useState(false);
+ const [draftKey, setDraftKey] = useState(0);
+ const [planYear, setPlanYear] = useState(Number(data.today.slice(0,4)) + 1);
+ const [planMonth, setPlanMonth] = useState(data.today.slice(5,7));
  const counts=summary(data.events,data.links);
  const allYears=[...new Set(data.events.flatMap(e=>(e.document.date??e.document.period)?[(e.document.date??e.document.period)!.slice(0,4)]:[]))].sort().reverse();
  const events=useMemo(()=>data.events.filter(e=>(year==="all"||(e.document.date??e.document.period)?.startsWith(year))&&`${e.document.title} ${e.document.location} ${e.document.speakers}`.toLowerCase().includes(query.toLowerCase())).sort((a,b)=>(b.document.date??"").localeCompare(a.document.date??"")),[data.events,query,year]);
  const sources=useMemo(()=>data.sources.filter(x=>(!provider||x.document.provider===provider)&&`${x.document.title} ${x.document.type} ${x.document.date}`.toLowerCase().includes(query.toLowerCase())),[data.sources,provider,query]);
  useEffect(()=>{if(selected||creating||source)document.getElementById("archive-editor")?.scrollIntoView({behavior:"smooth",block:"start"});},[selected,creating,source]);
  async function save(input:unknown){setBusy(true);setMessage("");try{await post(input);const kind=(input as {kind:string}).kind;if(kind==="event"){setSelected(null);setCreating(null);}if(kind==="source")setSource(null);router.refresh();setMessage("저장했습니다. 담당자와 변경 이력이 기록됩니다.");}catch(e){setMessage(e instanceof Error?e.message:"저장하지 못했습니다");}finally{setBusy(false);}}
+ function openEvent(event: EventRow) {
+   setCreating(null);
+   setSource(null);
+   setSelected(event);
+ }
+ function startDraft(draft: EventDocument) {
+   setSelected(null);
+   setSource(null);
+   setDraftKey(key => key + 1);
+   setCreating(draft);
+ }
+ async function setEventDeleted({ id, version }: Pick<EventRow, "id" | "version">, deleted: boolean) {
+   setBusy(true);
+   setMessage("");
+   try {
+     await post({ kind: "event_visibility", id, version, document: { deleted } });
+     if (deleted) setSelected(event => event?.id === id ? null : event);
+     router.refresh();
+     setMessage(deleted ? "행사를 삭제했습니다. 삭제한 행사에서 복구할 수 있습니다." : "행사를 복구했습니다.");
+   } catch (e) {
+     setMessage(e instanceof Error ? e.message : "행사 상태를 변경하지 못했습니다.");
+   } finally {
+     setBusy(false);
+   }
+ }
  const typeCounts=archiveTypes.map((type,i)=>({type,n:events.filter(e=>e.document.type===type).length,color:colors[i]}));let offset=0;const gradient=typeCounts.map(x=>{const start=offset;offset+=events.length?x.n/events.length*100:0;return `${x.color} ${start}% ${offset}%`;}).join(",");
  const providers=[...new Set(data.sources.map(x=>x.document.provider))];
  return <div className="space-y-5">
-  <PageHeader title="홍보·마케팅 통합 관리" description="하나의 프로젝트에서 기획 → 채널별 실행 → 참석·상담 → 비용·결과 → 다음 해 개선까지." actions={<Button disabled={!data.canWrite} onClick={()=>{setSelected(null);setCreating({...blankEvent(),state:"planned"});}}>+ 행사·홍보 기획</Button>}/>
+  <PageHeader title="홍보·마케팅 통합 관리" description="하나의 프로젝트에서 기획 → 채널별 실행 → 참석·상담 → 비용·결과 → 다음 해 개선까지." actions={data.canWrite && <Button disabled={busy} onClick={() => startDraft({ ...blankEvent(), state: "planned", period: tab === "annual" ? `${planYear}-${planMonth}` : null })}>+ 행사 추가</Button>}/>
   <div className={s.sources}><span>원본</span>{rootLinks.map(([label,url])=><a key={url} href={url} target="_blank" rel="noreferrer">{label} ↗</a>)}</div>
   {message&&<div role="status" className={s.message}>{message} <Button variant="outline" size="sm" onClick={()=>setMessage("")}>닫기</Button></div>}
   <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">{([["행사·프로젝트",counts.total],["날짜 확인 필요",counts.conflicts],["실행 확인",counts.held],["연결된 원생",counts.linkedStudents],["원본 수집함",data.sources.length]] as const).map(([label,n])=><BigStat key={label} label={label} value={Number(n).toLocaleString()}/>)}</div>
@@ -44,22 +77,45 @@ export function ArchiveWorkspace({data,initialView="history"}:{data:ArchiveData;
    <ToolbarSegment>{VIEWS.map(([key,label])=><ToolbarSegmentItem key={key} active={tab===key} onClick={()=>{setTab(key);setPage(0);setQuery("");}}>{label}</ToolbarSegmentItem>)}</ToolbarSegment>
    {tab==="history"&&<SearchableSelect ariaLabel="연도" valuePrefix="연도" value={year} onValueChange={setYear} triggerClassName={TOOLBAR_SELECT} options={[{value:"all",label:"전체"},...allYears.map(y=>({value:y,label:y}))]}/>}
    {tab==="sources"&&<SearchableSelect ariaLabel="출처" valuePrefix="출처" value={provider} onValueChange={v=>{setProvider(v);setPage(0);}} triggerClassName={TOOLBAR_SELECT} options={[{value:"",label:"전체"},...providers.map(p=>({value:p,label:p}))]}/>}
+   {data.canWrite && (tab === "history" || tab === "annual") && <Button variant="outline" size="sm" aria-expanded={showDeleted} onClick={() => setShowDeleted(value => !value)}>삭제한 행사 ({data.deletedEvents.length})</Button>}
    {/* 검색은 머리글 동작 줄로 옮겨 그린다(HeaderSearchSlot) — 첫 그림 자리도 이 툴바 줄 안이라 옮겨 갈 때 본문이 튀지 않는다. */}
    {(tab==="history"||tab==="sources")&&<StudentSearchToggle ariaLabel="행사·원본 검색" placeholder="행사명·자료명" inputWidth="w-48" value={query} onChange={v=>{setQuery(v);setPage(0);}}/>}
   </Toolbar>
   <div className={s.body}>
-  {tab==="history"&&<><div className={s.columns}><section className={s.panel}><h2>행사 유형별 기록 비중</h2><div className={s.mini}><div className={s.donut} style={{background:events.length?`conic-gradient(${gradient})`:"var(--bg-soft)"}}><span>{events.length}<small>개 기록</small></span></div><div className={s.legend}>{typeCounts.map(x=><div key={x.type}><i style={{background:x.color}}/>{x.type} · {x.n}건</div>)}</div></div></section><section className={s.panel}><MonthlyYearChart events={data.events}/></section></div><section className={s.panel}><div className={s.table}><table><thead><tr><th>행사·홍보 프로젝트</th><th>일정·장소</th><th>예약 / 참석 원문</th><th>책임자·실행</th><th>비용·성과 연결</th></tr></thead><tbody>{events.map(e=><tr key={e.id}><td><button className={s.linkButton} onClick={()=>{setSelected(e);setCreating(null);}}>{e.document.title}</button><small>{e.document.type} · {statuses[e.document.state]}</small>{dateConflict(e.document)&&<span className={`${s.badge} ${s.badgeWarn}`}>날짜 확인 필요</span>}</td><td>{e.document.date??(e.document.period?`${e.document.period} · 월 단위`:"날짜 미정")}<small>{e.document.time} · {e.document.location}</small></td><td>{e.document.reservationRaw||"미입력"} / {e.document.attendanceRaw||"미입력"}<small>재원/비재원: {e.document.compositionRaw||"미입력"}</small></td><td>{data.staff.find(x=>x.id===e.document.ownerId)?.display_name??"담당 미지정"}<small>준비업무 {e.document.work.filter(x=>x.state==="done").length}/{e.document.work.length} · 집행 {e.document.executions.length}개</small></td><td>{money(campaignCost(e.document))}<small>원생 접점 {data.links.filter(x=>x.event_id===e.id).length}건 · 자료 {data.edges.filter(x=>x.event_id===e.id).length}개</small></td></tr>)}</tbody></table></div>{!events.length&&<div className={s.empty}>조건에 맞는 기록이 없습니다.</div>}</section></>}
-  {tab==="annual"&&<section className={s.panel}><h2>지난 3년을 비교하며 신년 계획 세우기</h2><label>기획 연도 <input type="number" min={2017} max={2100} value={planYear} onChange={e=>{const n=Number(e.target.value);if(n>=2017&&n<=2100)setPlanYear(n);}}/></label><p className={s.muted}>과거 행사를 참고해 기획을 만들면 기존 결과와 비용은 새 실적으로 복사하지 않습니다.</p><div className={s.yearcols}>{[planYear-3,planYear-2,planYear-1].map(y=><article key={y}><h3>{y}년</h3>{data.events.filter(e=>(e.document.date??e.document.period)?.startsWith(String(y))&&!dateConflict(e.document)).sort((a,b)=>(a.document.date??"").localeCompare(b.document.date??"")).map(e=><div className={s.eventmini} key={e.id}><b>{e.document.date} · {e.document.title}</b><small className={s.muted}>예약 {e.document.reservationRaw||"미확인"} / 참석 {e.document.attendanceRaw||"미확인"} · {money(campaignCost(e.document))}</small><p>{e.document.nextAction||"개선사항 미입력"}</p><button disabled={!data.canWrite} onClick={()=>{setSelected(null);setCreating(planNextYear(e,planYear));}}>이 기록으로 {planYear} 기획</button></div>)}</article>)}</div><h3>{planYear}년 기획</h3>{data.events.filter(e=>(e.document.date??e.document.period)?.startsWith(String(planYear))).map(e=><p key={e.id}><button className={s.linkButton} onClick={()=>setSelected(e)}>{e.document.title}</button> · {e.document.date} · {statuses[e.document.state]}</p>)}</section>}
+  {data.canWrite && showDeleted && (tab === "history" || tab === "annual") && <section className={s.panel} aria-label="삭제한 행사">
+    <h2>삭제한 행사</h2>
+    {data.deletedEvents.length === 0 && <p>삭제한 행사가 없습니다.</p>}
+    {data.deletedEvents.map(event => <div className={s.deletedRow} key={event.id}>
+      <div><strong>{event.title}</strong><p>{event.schedule ?? "일정 미정"} · {kstDateOf(event.deletedAt)} 삭제</p></div>
+      <Button variant="outline" size="sm" disabled={busy} aria-label={`${event.title} 복구`} onClick={() => void setEventDeleted(event, false)}>복구</Button>
+    </div>)}
+  </section>}
+  {tab==="history"&&<><div className={s.columns}><section className={s.panel}><h2>행사 유형별 기록 비중</h2><div className={s.mini}><div className={s.donut} style={{background:events.length?`conic-gradient(${gradient})`:"var(--bg-soft)"}}><span>{events.length}<small>개 기록</small></span></div><div className={s.legend}>{typeCounts.map(x=><div key={x.type}><i style={{background:x.color}}/>{x.type} · {x.n}건</div>)}</div></div></section><section className={s.panel}><MonthlyYearChart events={data.events}/></section></div><section className={s.panel}><div className={s.table}><table><thead><tr><th>행사·홍보 프로젝트</th><th>일정·장소</th><th>예약 / 참석 원문</th><th>책임자·실행</th><th>비용·성과 연결</th>{data.canWrite&&<th scope="col">관리</th>}</tr></thead><tbody>{events.map(e=><tr key={e.id}><td><button className={s.linkButton} onClick={()=>openEvent(e)}>{e.document.title}</button><small>{e.document.type} · {statuses[e.document.state]}</small>{dateConflict(e.document)&&<span className={`${s.badge} ${s.badgeWarn}`}>날짜 확인 필요</span>}</td><td>{e.document.date??(e.document.period?`${e.document.period} · 월 단위`:"날짜 미정")}<small>{e.document.time} · {e.document.location}</small></td><td>{e.document.reservationRaw||"미입력"} / {e.document.attendanceRaw||"미입력"}<small>재원/비재원: {e.document.compositionRaw||"미입력"}</small></td><td>{data.staff.find(x=>x.id===e.document.ownerId)?.display_name??"담당 미지정"}<small>준비업무 {e.document.work.filter(x=>x.state==="done").length}/{e.document.work.length} · 집행 {e.document.executions.length}개</small></td><td>{money(campaignCost(e.document))}<small>원생 접점 {data.links.filter(x=>x.event_id===e.id).length}건 · 자료 {data.edges.filter(x=>x.event_id===e.id).length}개</small></td>{data.canWrite&&<td><Button variant="ghost" size="sm" disabled={busy} aria-label={e.document.title+" 삭제"} onClick={()=>setPendingDelete(e)}>삭제</Button></td>}</tr>)}</tbody></table></div>{!events.length&&<div className={s.empty}>조건에 맞는 기록이 없습니다.</div>}</section></>}
+  {tab==="annual"&&<section className={s.panel}>
+    <AnnualComparison events={data.events} canWrite={data.canWrite} busy={busy}
+      planYear={planYear} month={planMonth} onYearChange={setPlanYear} onMonthChange={setPlanMonth}
+      onOpen={openEvent} onPlan={(event, year) => startDraft(planNextYear(event, year))}
+      onAdd={(period, planned) => startDraft({ ...blankEvent(), period, state: planned ? "planned" : "review" })}
+      onDelete={setPendingDelete}/>
+  </section>}
   {tab==="sources"&&<section className={s.panel}><h2>여러 원본을 하나의 행사에 연결</h2><p className={s.muted}>원본은 수집 시점의 기록입니다. 일정일·업무 마감일·파일 수정일은 서로 다른 날짜입니다. 원본 제목만 같다는 이유로 자동 병합하지 않습니다.</p><div className={s.pager}><span>{sources.length.toLocaleString()}개 · {page+1} / {Math.max(1,Math.ceil(sources.length/40))}</span><div><button disabled={page===0} onClick={()=>setPage(page-1)}>이전</button> <button disabled={(page+1)*40>=sources.length} onClick={()=>setPage(page+1)}>다음</button></div></div><div className={s.table}><table><thead><tr><th>출처</th><th>자료·업무·일정</th><th>날짜 의미</th><th>연결·처리</th></tr></thead><tbody>{sources.slice(page*40,page*40+40).map(x=><tr key={x.id}><td>{x.document.provider}<small>{x.document.type}</small></td><td>{href(x.document.url)?<a href={href(x.document.url)!} target="_blank" rel="noreferrer">{x.document.title} ↗</a>:x.document.title}<small>수집: {new Date(x.ingested_at).toLocaleDateString("ko-KR",{timeZone:"Asia/Seoul"})}</small></td><td>{x.document.date||"미정"}<small>{x.document.dateKind}</small></td><td><span className={s.badge}>{({review:"확인 필요",reference:"참고 자료",excluded:"실적 제외",linked:"행사 연결"})[x.review_status as "review"]??x.review_status}</span><small>{data.edges.filter(e=>e.source_id===x.id).length}개 행사 연결</small><button disabled={!data.canWrite} onClick={()=>setSource(x)}>연결·분류</button></td></tr>)}</tbody></table></div></section>}
   {tab==="gaps"&&<section className={s.panel}><h2>입력·연결이 필요한 기록</h2><p className={s.muted}>과거 문서의 집계 인원과 학생별 연결은 별도입니다. 불명확한 값은 미확인으로 표시합니다.</p><div className={s.table}><table><thead><tr><th>행사</th><th>부족한 연결</th><th>다음 행동</th></tr></thead><tbody>{data.events.map(e=>{const gaps=[dateConflict(e.document)&&"날짜 충돌",!e.document.ownerId&&"책임자",e.document.attendees===null&&"참석 인원 확인",campaignCost(e.document)===null&&"실제 비용",!data.links.some(l=>l.event_id===e.id)&&"원생·상담 결과",!e.document.retrospective&&"회고"];return <tr key={e.id}><td>{e.document.title}</td><td>{gaps.filter(Boolean).join(" · ")||"현재 항목 입력됨"}</td><td><button onClick={()=>setSelected(e)}>통합 기록 열기</button></td></tr>;})}</tbody></table></div></section>}
-  <div id="archive-editor">{(selected||creating)&&<EventEditor key={selected?.id??"new"} row={selected} initial={creating??selected!.document} data={data} busy={busy} save={save} close={()=>{setSelected(null);setCreating(null);}}/>}
+  <div id="archive-editor">{(selected||creating)&&<EventEditor key={selected?.id??`new-${draftKey}`} row={selected} initial={creating??selected!.document} data={data} busy={busy} save={save} remove={setPendingDelete} close={()=>{setSelected(null);setCreating(null);}}/>}
   {source&&<SourceEditor key={source.id} source={source} data={data} busy={busy} save={save} close={()=>setSource(null)}/>}</div>
   <p className={s.muted}>드라이브·노션 자료는 2026-11-10 수집 스냅샷입니다. 지속 자동 수집은 아직 연결하지 않았습니다. 실제 학생·비용 연결이 갖춰진 범위에서 성과를 확인합니다.</p>
   </div>
+  {pendingDelete && <ConfirmDialog open title="행사 삭제" danger confirmLabel="삭제"
+    message={`‘${pendingDelete.document.title}’ 행사를 목록과 집계에서 제외합니다. 삭제한 행사에서 복구할 수 있습니다.`}
+    onCancel={() => setPendingDelete(null)}
+    onConfirm={() => {
+      const event = pendingDelete;
+      setPendingDelete(null);
+      void setEventDeleted(event, true);
+    }} />}
  </div>;
 }
 
-function EventEditor({row,initial,data,busy,save,close}:{row:EventRow|null;initial:EventDocument;data:ArchiveData;busy:boolean;save:(x:unknown)=>Promise<void>;close:()=>void}){
+function EventEditor({row,initial,data,busy,save,close,remove}:{row:EventRow|null;initial:EventDocument;data:ArchiveData;busy:boolean;save:(x:unknown)=>Promise<void>;close:()=>void;remove:(row:EventRow)=>void}){
  const [d,set]=useState(initial),[stage,setStage]=useState("plan"),[q,setQ]=useState(""),[students,setStudents]=useState<{id:string;name:string;school:string|null;grade:string|null}[]>([]),[studentId,setStudent]=useState(""),[kind,setKind]=useState<keyof typeof linkLabels>("attended"),[when,setWhen]=useState(data.today),[reference,setReference]=useState(""),[result,setResult]=useState(""),[error,setError]=useState("");
  const patch=(key:keyof EventDocument,value:unknown)=>set(old=>({...old,[key]:value}));
  const field=(key:keyof EventDocument,label:string,type="text",wide=false)=><label className={wide?s.wide:""} key={key}>{label}<input type={type} value={d[key]===null?"":String(d[key])} onChange={e=>patch(key,type==="number"?(e.target.value===""?null:Number(e.target.value)):(type==="date"||type==="month")?(e.target.value||null):e.target.value)}/></label>;
@@ -76,7 +132,7 @@ function EventEditor({row,initial,data,busy,save,close}:{row:EventRow|null;initi
  {stage==="review"&&<div className={s.fields}>{text("retrospective","목표 대비 결과·원인·잘된 점·아쉬운 점")}{text("nextAction","다음 행사에서 유지·변경할 사항")}{d.referenceEventId&&<p>이전 행사 참고 ID: {d.referenceEventId}</p>}</div>}
  </fieldset>
  {stage==="graph"&&<><svg className={s.graph} viewBox="0 0 650 290" role="img" aria-label="행사 중심 연결 지도"><circle cx="325" cy="145" r="40" style={{fill:colors[0]}}/><text x="325" y="149" textAnchor="middle" style={{fill:"white"}}>행사·프로젝트</text>{nodeSets.map((n,i)=>{const a=i*Math.PI*2/5-Math.PI/2,x=325+Math.cos(a)*210,y=145+Math.sin(a)*100;return <g key={n.label}><line x1="325" y1="145" x2={x} y2={y} style={{stroke:n.n?n.color:"var(--line-strong)"}} strokeDasharray={n.n?undefined:"5 5"} strokeWidth={n.n?Math.min(8,1+Math.log2(n.n+1)):1} opacity={n.n ? .85 : .5}/><circle cx={x} cy={y} r={23+Math.min(10,n.n)} style={{fill:n.n?n.color:"var(--card)",stroke:n.n?undefined:"var(--line-strong)"}}/><text x={x} y={y+4} textAnchor="middle" style={{fill:n.n?"white":"var(--foreground)"}}>{n.n}</text><text x={x} y={y+48} textAnchor="middle">{n.label}</text></g>;})}</svg><p className={s.muted}>연결된 기록이 많을수록 선이 굵어집니다. 점선은 미입력/미연결이며, 실선도 성과 검증 완료를 뜻하지 않습니다.</p><h3>이 행사에 연결된 자료</h3>{linkedSources.map(x=><a className={s.sectionLink} key={x.id} href={href(x.document.url)??undefined} target="_blank" rel="noreferrer">{x.document.provider} · {x.document.title} ↗</a>)}<h3>노션 원본 속성</h3><pre className={s.raw}>{JSON.stringify(d.raw,null,2)}</pre></>}
- <div className={s.formFooter}><Button variant="outline" onClick={close}>닫기</Button><Button disabled={busy||!data.canWrite} onClick={()=>save({kind:"event",id:row?.id??null,version:row?.version??0,document:d})}>{busy?"저장 중…":"프로젝트 저장"}</Button></div></section>;
+ <div className={s.formFooter}>{row && data.canWrite && <Button variant="destructive" disabled={busy} onClick={() => remove(row)}>행사 삭제</Button>}<Button variant="outline" onClick={close}>닫기</Button><Button disabled={busy||!data.canWrite} onClick={()=>save({kind:"event",id:row?.id??null,version:row?.version??0,document:d})}>{busy?"저장 중…":"프로젝트 저장"}</Button></div></section>;
 }
 
 function SourceEditor({source,data,busy,save,close}:{source:SourceRow;data:ArchiveData;busy:boolean;save:(x:unknown)=>Promise<void>;close:()=>void}){

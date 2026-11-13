@@ -45,8 +45,7 @@ export function AccountingPanel({ data, reportIndex, importAllowed }: { data: Ma
       setDraft(null); setLedgerDrafts([]); setMessage(json.saved?.unchanged ? "이미 같은 내용이 저장되어 있습니다." : "손익 자료를 저장했습니다."); router.refresh();
     } catch (e) { setMessage(e instanceof Error ? e.message : "저장하지 못했습니다"); } finally { setBusy(false); }
   }
-  return <section id="accounting"><div className={s.sectionTitle}><h2>ECOUNT 회계 손익</h2>{importAllowed ? <label className={s.upload}>{busy ? "처리 중…" : "손익 엑셀·원장 CSV 가져오기"}<input aria-label="ECOUNT 회계 파일" type="file" accept=".xlsx,.csv" disabled={busy} onChange={e => { void preview(e.target.files?.[0]); e.target.value = ""; }}/></label> : null}</div>
-    {importAllowed ? null : <p className={s.notice}>이 지점은 ECOUNT 회계 자료 가져오기가 꺼져 있습니다(계정 분류표 확인 전) — 사용하려면 운영사에 문의하세요. 청구·수납·수강 지표와 MakeEdu 대조는 그대로 쓸 수 있습니다.</p>}
+  return <section id="accounting"><div className={s.sectionTitle}><h2>{importAllowed ? "ECOUNT 회계 손익" : "회계 손익"}</h2>{importAllowed ? <label className={s.upload}>{busy ? "처리 중…" : "손익 엑셀·원장 CSV 가져오기"}<input aria-label="ECOUNT 회계 파일" type="file" accept=".xlsx,.csv" disabled={busy} onChange={e => { void preview(e.target.files?.[0]); e.target.value = ""; }}/></label> : null}</div>
     <p>원본 회사명과 기간을 그대로 보존합니다. 청구액과 회계 매출은 합산하지 않습니다. 연간·누적 보고서는 월별로 나누지 않습니다.</p>
     {message ? <p role="status" className={s.notice}>{message}</p> : null}
     <ReportedFinancialPanel view={data.reportedFinancials}/>

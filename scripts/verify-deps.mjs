@@ -8,7 +8,9 @@
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
+// 🔴 경로는 전부 git 표기(`src/a/b.ts` — `/`)다 — `path.posix`로만 다룬다. 윈도의 `path.join`은 `\`를 돌려줘 `resolved === stem`이
+//    늘 어긋나고, 상대 import 소비자가 통째로 빠졌다(역의존 0개 · 2026-11-13 Codex 재현 — 타입 검사가 소비자를 안 봤다).
+import { posix as path } from "node:path";
 
 const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const lines = (s) => s.split("\n").map((x) => x.trim()).filter(Boolean);

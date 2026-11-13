@@ -97,6 +97,7 @@ const RULES: readonly [string, string][] = [
   ["approval_", "staff"],
   // 업무 요청(s2_0018) — 요청 → 보고 → 검토. 아직 미리보기 단계라 슬랙으로는 안 흘린다(FORBID_KEYS · SQL 머리말 약속).
   ["work_request_", "staff"],
+  ["duty_note_", "staff"],
   ["leave_", "staff"],
   ["self_", "staff"],
   ["resume_", "staff"],
@@ -177,6 +178,8 @@ const FORBID_KEYS = new Set([
   // 업무 요청 · 업무 비서 — 슬랙과 잇지 않는다(업무 요청 SQL 머리말 · 미리보기 단계).
   "work_request_create",
   "work_request_act",
+  // 업무 완성도 관리 기록 — 사유 글에 학생·직원 사정이 들 수 있다. 슬랙으로 내보내지 않는다.
+  "duty_note_add",
   "dashboard_secretary_run",
   // 학원 비서 — 질문 글(대상 문구)에 원생 이름·금액이 그대로 들 수 있다. 슬랙으로 내보내지 않는다.
   "assistant_ask",
@@ -207,6 +210,27 @@ export function activityGradeOf(action: string): ActivityGrade {
 }
 
 export type ActivityOption = { key: string; label: string; category: string; grade: ActivityGrade };
+export type ActivityAvailability = {
+  moduleOn: (id: "approvals" | "class_review" | "classnote" | "ecs" | "kiosk" | "makeedu" | "makeups" | "mcs" | "newcomers" | "payroll" | "seat_attendance" | "sheet_sync" | "shuttle" | "staff_leaves") => boolean;
+  todaysMath: boolean;
+  videoReview: boolean;
+  collector: boolean;
+};
+
+export function activityAvailable(key: string, availability: ActivityAvailability): boolean {
+  const modulePrefixes: readonly [Parameters<ActivityAvailability["moduleOn"]>[0], readonly string[]][] = [
+    ["approvals", ["approval_"]], ["class_review", ["class_review_", "teacher_portfolio_", "teacher_evaluation_"]],
+    ["classnote", ["classnote_"]], ["ecs", ["ecs_", "class_sheet_"]], ["kiosk", ["kiosk_"]],
+    ["makeedu", ["makeedu_"]], ["makeups", ["makeup_"]], ["mcs", ["mcs_", "progress_", "math_textbook_", "math_book_", "school_exam_"]],
+    ["newcomers", ["newcomer_", "student_care_"]], ["payroll", ["payroll_", "payslip_", "teacher_comp_", "class_salary_", "session_splits_"]],
+    ["seat_attendance", ["seat_"]], ["sheet_sync", ["sheets_sync_"]], ["shuttle", ["shuttle_", "parent_account_"]], ["staff_leaves", ["leave_", "staff_leave_"]],
+  ];
+  for (const [module, prefixes] of modulePrefixes) if (prefixes.some((prefix) => key.startsWith(prefix))) return availability.moduleOn(module);
+  if (key.startsWith("todays_math_")) return availability.todaysMath;
+  if (key.startsWith("video_") || key.startsWith("homework_video_")) return availability.videoReview;
+  if (key.startsWith("management_collector_")) return availability.collector;
+  return true;
+}
 
 /** 서버가 `AUDIT_ACTIONS`(키→라벨)로 만든다. 순서 = 분류 순 → 원래 등록 순. */
 export function buildActivityOptions(labels: Readonly<Record<string, string>>): ActivityOption[] {
@@ -215,4 +239,8 @@ export function buildActivityOptions(labels: Readonly<Record<string, string>>): 
     .map(([key, label]) => ({ key, label, category: activityCategoryOf(key) ?? "", grade: activityGradeOf(key) }))
     .filter((o) => o.category)
     .sort((a, b) => (order.get(a.category) ?? 99) - (order.get(b.category) ?? 99));
+}
+
+export function availableActivityOptions(labels: Readonly<Record<string, string>>, availability: ActivityAvailability): ActivityOption[] {
+  return buildActivityOptions(labels).filter((option) => activityAvailable(option.key, availability));
 }

@@ -16,6 +16,7 @@ import { addDays, kstDateOf, kstLocalToIso, kstToday } from "@/lib/date-kst";
 import { stripPastedMarkup } from "../paste-cleanup";
 import { consultationSubject } from "../subject";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isFeatureLicensed } from "@/lib/license/server";
 import { subjectLabelRecord } from "@/features/owner/subjects";
 import {
   canConsultStudent,
@@ -312,6 +313,7 @@ function classAudit(decision: ClassDecision | null): Record<string, unknown> {
  */
 function scheduleFlowRefresh(tenantId: string, studentId: string) {
   after(async () => {
+    if (!(await isFeatureLicensed(tenantId, "ai_analysis"))) return;
     const r = await refreshFlowInsight({ tenantId, studentId, kind: "consultations", reason: "consultation_saved" });
     if (r.status === "failed") console.error(`[consultations] 상담 흐름 분석 갱신 실패(${studentId}): ${r.error}`);
   });
@@ -414,7 +416,7 @@ export async function createStudentConsultation(
   scheduleFlowRefresh(user.tenantId, input.studentId);
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
   // (제출 시점 무조건 clear는 서버 검증 실패 시 입력 유실 위험 → 성공 확정 기반으로 전환.)
-  return { ok: true, redirectTo: "/consultations", nonce: Date.now() };
+  return { ok: true, redirectTo: "/consultations?list=1", nonce: Date.now() };
 }
 
 export async function updateStudentConsultation(
@@ -582,7 +584,7 @@ export async function updateStudentConsultation(
   revalidatePath(`/students/${input.studentId}`);
   scheduleFlowRefresh(user.tenantId, input.studentId);
   // redirect 대신 결과 반환 — 클라가 성공 확정(nonce) 후 초안 삭제·이동(B-2).
-  return { ok: true, redirectTo: "/consultations", nonce: Date.now() };
+  return { ok: true, redirectTo: "/consultations?list=1", nonce: Date.now() };
 }
 
 export type ToggleFollowUpState = { error?: string } | undefined;

@@ -9,12 +9,13 @@ import type { KgGraphPrefs, KgNetView } from "./graph-prefs";
  */
 const sessionPrefs: Partial<KgGraphPrefs> & { wide?: boolean } = {};
 
-/** 지식그래프 네트워크의 보기 상태(개별 기록 | 주체별 요약 · 영역별 색상 · 이름 표시 · 넓게 보기) — `ExploreNetwork`에 그대로 넘기는 값과 바꾸는 함수. */
+/** 지식그래프 네트워크의 보기 상태(개별 기록 | 주체별 요약 · 묶기 · 영역별 색상 · 이름 표시 · 넓게 보기) — `ExploreNetwork`에 그대로 넘기는 값과 바꾸는 함수. */
 export function useGraphView(prefs: KgGraphPrefs) {
   const init = { ...prefs, ...sessionPrefs };
   const [view, setView] = useState<KgNetView>(init.netView);
   const [colored, setColored] = useState(init.colored);
   const [labels, setLabels] = useState(init.labels);
+  const [bundle, setBundle] = useState(init.bundle);
   const [wide, setWide] = useState(sessionPrefs.wide === true);
   const save = (patch: Partial<KgGraphPrefs>) => {
     Object.assign(sessionPrefs, patch);
@@ -42,6 +43,11 @@ export function useGraphView(prefs: KgGraphPrefs) {
     onLabelsChange: (b: boolean) => {
       setLabels(b);
       save({ labels: b });
+    },
+    bundle,
+    onBundleChange: (b: boolean) => {
+      setBundle(b);
+      save({ bundle: b });
     },
   };
 }

@@ -8,6 +8,7 @@ import { getSupportRequest } from "@/features/support/server/queries";
 import { canAuthorEditRequest } from "@/features/support/types";
 import { SupportNotReady } from "@/components/support/list-states";
 import { SupportRequestOwnerActions } from "../../_components/owner-actions";
+import { phoneLabel } from "@/lib/format/phone";
 
 export const metadata = { title: "고객센터 · 개선요청 — 에이와" };
 
@@ -41,7 +42,7 @@ export default async function SupportRequestPage({ params }: { params: Promise<{
           initial={{
             title: item.title,
             body: item.body,
-            contactPhone: item.contactPhone ?? "",
+            contactPhone: phoneLabel(item.contactPhone) ?? "",
             contactEmail: item.contactEmail ?? "",
           }}
         />

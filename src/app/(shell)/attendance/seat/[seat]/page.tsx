@@ -270,7 +270,7 @@ export default async function SeatAttendancePage({
           <div className="flex flex-wrap items-center gap-1.5">
             {/* 자리는 강사 축의 한 갈래라 되돌아갈 길을 헤더에 둔다(사이드바 항목이 없다). 출석부를 못 여는 사람에겐 그리지 않는다. */}
             {canOpenAttendance ? (
-              <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}>
+              <Link href="/attendance?list=1" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF} mr-1`}>
                 출석부로
               </Link>
             ) : null}

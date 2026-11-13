@@ -186,6 +186,36 @@ describe("AssistantLauncher", () => {
     expect(within(again).getByRole("heading", { name: "반별 미납 보고서" })).toBeInTheDocument();
   });
 
+  it("완료된 답에도 강도 상향 안내를 만들지 않고 질문 요청에 강도를 보내지 않는다", async () => {
+    let n = 0;
+    routes["POST /api/assistant/ask"] = () => {
+      n += 1;
+      return {
+        ok: true,
+        status: 200,
+        body: ndjson([
+          ...(n === 1 ? [{ type: "thread", threadId: "T1", title: "반별 미납" } as AskEvent] : []),
+          { type: "report", messageId: `M${n}`, report: { ...report, title: "완료된 답" } },
+        ]),
+        json: async () => ({}),
+      };
+    };
+    render(<AssistantLauncher />);
+    fireEvent.click(screen.getByRole("button", { name: /비서/ }));
+    const dialog = await findDialog();
+    const input = within(dialog).getByRole("textbox", { name: "질문" });
+    fireEvent.change(input, { target: { value: "미납 몇 건" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await within(dialog).findByRole("heading", { name: "완료된 답" }, { timeout: 15_000 })).toBeInTheDocument();
+    const ASK = "마음에 들지 않으면 추론 강도를 올려서 다시 물어보시겠습니까?";
+    expect(within(dialog).queryByText(ASK)).toBeNull();
+    expect(within(dialog).queryByRole("radio")).toBeNull();
+    const sent = calls.filter((c) => c.method === "POST");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.body).toMatchObject({ question: "미납 몇 건" });
+    expect(sent[0]?.body).not.toHaveProperty("level");
+  });
+
   it("답을 만드는 동안 — 단계 타임라인(같은 id는 덮어쓴다 · 표 칩) · 멈추기", async () => {
     let push: (e: AskEvent) => void = () => {};
     routes["POST /api/assistant/ask"] = (_url, init) => {

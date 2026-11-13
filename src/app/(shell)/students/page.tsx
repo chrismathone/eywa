@@ -12,6 +12,7 @@ import { EmbedLink } from "@/components/embed-link";
 import { ToolbarChip } from "@/components/toolbar";
 import { TOOLBAR_SELECT } from "@/components/toolbar-controls";
 import { requireAccess } from "@/lib/auth/require-access";
+import { redirectStatsFirst } from "@/lib/auth/stats-first";
 import { accessLevelTenant } from "@/lib/auth/perm-matrix";
 import {
   getStudentsPage,
@@ -71,6 +72,7 @@ import {
 import { EnrolledStatCard } from "./_components/enrolled-stat-card";
 import { SortArrow } from "@/components/sort-arrow";
 import { PAGE_TITLE_SUFFIX } from "@/lib/config/site-metadata";
+import { phoneLabel } from "@/lib/format/phone";
 
 export async function generateMetadata() {
   return { title: `${sheetT(await getTeacherViewLang(), "stu.title")}${PAGE_TITLE_SUFFIX}` };
@@ -144,6 +146,8 @@ export default async function StudentsPage({
   const [scope, prefsLoaded] = await Promise.all([effectiveTeacherScope({ includeScheduled: true }), loadStudentListPrefs()]);
   // 조회 실패(null)면 기본값으로 그리되 **이번 렌더는 저장하지 않는다** — 기본값을 저장값으로 알고 전체를 보내면 다른 축이 지워진다(리뷰 2026-09-04).
   const prefs = prefsLoaded ?? DEFAULT_STUDENT_LIST_PREFS;
+  // 원장·관리자가 메뉴로 열면 통계가 먼저(stats-first.ts) — 필터·탭이 실린 주소와 '목록으로'(list=1)는 그대로 목록. · 강사 범위면 통계 입구가 없어 목록 그대로.
+  if (!scope) await redirectStatsFirst(user.systemRole, sp, "/students");
   const axis = subjectAxisOf(scope);
   // 🔴 과목 필터를 감춘 화면(담당 과목 1개)에선 걸려 있던 값을 "전체"로 되돌린다 — 저장된 필터·직접 URL이 남아 있으면
   // 되돌릴 컨트롤이 없는데 행이 조용히 빠진다(축 밖 과목이면 0명 · 축 안 과목이어도 **휴원 학생이 사라진다**).
@@ -303,7 +307,7 @@ export default async function StudentsPage({
     if (q && !patch.clearQ) params.set("q", q);
     if (!patch.clearQ && (patch.page ?? 1) > 1) params.set("page", String(patch.page));
     const s = params.toString();
-    return s ? `/students?${s}` : "/students";
+    return s ? `/students?${s}` : "/students?list=1";
   };
   const pageHref = (p: number) => listParams({ page: p });
   // 열 머리 정렬 화살표(원장 2026-10-14) — 다른 열이면 그 열 오름차순, 같은 열이면 방향을 뒤집는다.
@@ -668,7 +672,7 @@ export default async function StudentsPage({
                           표 오른쪽 끝에 홀로 매달린다. 열 제목과 같은 축(가운데 — 원장 2026-09-18)에 둔다.
                           ⚠️ `num`(고정폭 숫자)은 남긴다 — 자릿수가 같아야 번호가 위아래로 줄을 이룬다. */}
                       <td className="text-text-dim num whitespace-nowrap" data-empty={s.parentPhone ? undefined : "true"}>
-                        {s.parentPhone ?? "—"}
+                        {phoneLabel(s.parentPhone) ?? "—"}
                       </td>
                     </tr>
                   );

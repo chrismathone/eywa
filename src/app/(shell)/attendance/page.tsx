@@ -18,6 +18,7 @@ import { FilterSelect } from "@/components/filter-select";
 import { kstMonth, kstToday, monthRange } from "@/lib/date-kst";
 import { classTaughtBy, teacherSheetClasses } from "@/features/attendance/teacher-sheet-classes";
 import { requireAccess } from "@/lib/auth/require-access";
+import { redirectStatsFirst } from "@/lib/auth/stats-first";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { getTenantSettings } from "@/features/owner/server/queries";
 import { isModuleEnabled } from "@/lib/modules";
@@ -253,6 +254,8 @@ export default async function AttendancePage({
    *    강사 X의 출석부에 X가 볼 수 없는 정산액·명세서 버튼이 섰다(2026-11-05 강사뷰 신원 점검).
    */
   const viewer = (await getCurrentUser({ teacherView: true })) ?? user;
+  // 원장·관리자가 메뉴로 열면 통계가 먼저(stats-first.ts) — 필터·탭이 실린 주소와 '목록으로'(list=1)는 그대로 목록.
+  await redirectStatsFirst(viewer.systemRole, await searchParams, "/attendance");
   const {
     class: classParam,
     month: monthParam,
@@ -1367,9 +1370,9 @@ export default async function AttendancePage({
               {showActualAmount && salaryConfig.needsLevels ? <span className="text-danger text-xs break-keep">{sheetT(lang, "att.actualSalary.needsLevels")}</span>
                 : showActualAmount ? <SalaryVisibleButton key={`${salaryConfig.teacherId}:${month}`} teacherId={salaryConfig.teacherId} month={month} checked={salaryConfig.visible} canEdit={salaryConfig.canEdit} /> : null}
             </> : undefined}
-            termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : {}}
-            confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : {}}
-            priceConfirmedRows={sessionBillingOn ? classBilledAmounts.priceConfirmed : []}
+            termSessionsByRow={sessionBillingOn ? classBilledAmounts.confirmedSessions : undefined}
+            confirmedPricesByRow={sessionBillingOn ? classBilledAmounts.confirmedPrices : undefined}
+            priceConfirmedRows={sessionBillingOn ? classBilledAmounts.priceConfirmed : undefined}
             noInvoiceRows={noInvoiceRows}
             money={money}
             moneyNote={moneyNote}

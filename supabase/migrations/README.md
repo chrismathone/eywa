@@ -1,5 +1,9 @@
 # Supabase 마이그레이션 — 적용 방식·순서·현재 상태
 
+## 2026-11-12 AywaSync 좌석 알림: 지점 좌석 라이선스 읽기 (s2_0097 · ✅ 운영 적용)
+
+`s2_0097_sync_agent_seat_license.sql` — 연동 역할에 `tenant_id`·`feature`·`is_active`·`max_seats` 네 칸의 읽기만 허용한다. 두 SELECT 정책은 현재 연동 지점의 `student_seats` 행으로 한정한다. 기존 사용자 정책과 데이터는 바꾸지 않는다. 운영 롤백 거래 검증 뒤 적용(2026-11-12): 자기 지점 좌석만 보임·다른 지점과 다른 기능 비노출·쓰기 불가·실제 원격 질의 3개 EXPLAIN 통과. 적용 전후 보안 권고 7개 동일, 새 권고 없음. 학생·알림 데이터 쓰기 0건.
+
 ## 🔴 2026-10-27 SQL 시즌2 — 시즌1은 합본 하나 · 새 파일은 `s2_0001`부터
 
 원장 *"이전 001~458번대까지 sql을 전부 하나로 정리해서 뭉쳐놔. 번호가 너무 많이 올랐어. 다시 1번부터 시작할 수 있게"* · *"시즌2 sql 느낌으로 시작해 새로"*.
@@ -10,7 +14,74 @@
 - 읽기 — 테스트·스크립트는 원래 이름으로 `readMigration("0349a_….sql")`, 적용 순서 전체는 `migrationFiles()`([`src/lib/db/migrations-corpus.mjs`](../../src/lib/db/migrations-corpus.mjs)). 문서의 옛 경로는 `s1_season1.sql#0349a_….sql`로 바꿨다. 아래 기록의 번호(0447a 등) = 합본의 그 구역.
 - 새 DB = `pnpm db:alphas` — 시즌1 구역을 하나씩 → 시즌2 파일. 🔴 **빈 DB 전용**(`public.tenants`가 있으면 멈춘다). `pnpm db:migrate`는 안내만 하고 멈춘다. 운영 DB는 새 시즌2 파일 하나만 원장 승인 뒤 적용한다.
 - 🔴 폴더에 규칙 밖 `.sql`(옛 `NNNNa_` · CLI 타임스탬프)이 섞이면 `migrationFiles()`가 던진다 — 그 SQL을 쓰는 가드·`db:alphas`가 모두 시끄럽게 실패한다(조용히 빠뜨리지 않게).
+- 🔴 **업무 완성도 SQL 25개 = 병합 때 이름만 바꿈(2026-11-12)** — 가지에서 `s2_0043`~`s2_0067`로 운영에 적용했고, main의 같은 번호(다른 기능)와 겹쳐 `s2_0069`~`s2_0093`(번호 +26 · 순서 그대로)으로 옮겼다. 본문은 적용한 그대로 — **다시 돌리지 않는다**. 아래 기록과 코드 주석의 번호는 새 번호다. ⚠️ 아래 aywa-next 기록의 '운영에 옛 이름 s2_0070~0075 · s2_0080~0082로 적용'은 그쪽 파일들의 옛 이름이다 — 지금 그 번호를 가진 업무 완성도 파일과는 다른 SQL(운영 기록은 번호가 아니라 파일 전체 이름으로 대조).
 - 마지막 시즌1 파일 `0458a_makeup_reservation_checked.sql`(보강 진행 여부 확인) — ✅ 운영 적용 2026-10-27(칸 2 · 지난 이행 예약 3건 확인으로 채움).
+
+## 2026-11-12 업무 완성도: '원어민 선생님'은 원장만 · 영상 숙제 낸 사람 규칙 (s2_0095 · ✅ 운영 적용 2026-11-12 · 직결 · 롤백 시험 뒤(강사 명의 거절 · 원장 통과 확인) · 앱보다 먼저)
+
+`s2_0095_duty_native_master_only_and_video_owner.sql` — 트리거 `tg_guard_user_native_teacher`(로그인한 사람이 바꿀 때 원장 · 운영자만) + `duty_video_homework_rollup` 다시 정의(낸 사람 = 보고서 작성 계정 · 따로 낸 숙제의 선생님만 · 지금 담임으로 메우지 않는다). 되돌리기: 트리거 · 함수를 내리면 s2_0094 상태.
+
+## 2026-11-12 업무 완성도: 원어민 표시 · 영상 숙제 참고 열 (s2_0094 · ✅ 운영 적용 2026-11-12 · 직결 · 롤백 시험 뒤 · 앱보다 먼저)
+
+`s2_0094_duty_native_and_video_homework.sql` — `users.native_teacher`(근무 설정 '원어민 선생님' 토글 · 기본 false) + `duty_video_homework_rollup`(낸 선생님 × 과목의 출제 · 판정 대상 · 회수 · service_role만). 적용 뒤 침산 원어민 세 분(김태건 · Florence Park · Kristine Driver)을 켰다(`work/tmp/apply94.mjs`). 되돌리기: 함수를 내리고 칸을 지운다(칸을 읽는 앱 코드가 먼저 빠져야 한다).
+
+## 2026-11-10 의무 장부: 건별 의무의 늦음 할 일은 담당자 × 종류에 하나 (s2_0073 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+
+`s2_0073_duty_task_group_case.sql` — 신규생 정착 콜처럼 회차가 항목 키인 건별 의무는 항목마다 할 일이 쪼개져 같은 이름이 네 줄로 보였다 → period='case'면 묶음 회차 ''. 본문 "이름(항목) · …"(`duties_private.cycle_label`). 옛 항목별 할 일은 cancelled로 닫히고 하나로 선다.
+
+## 2026-11-10 의무 장부: 할 일 본문에 업무 종류 (s2_0072 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+
+`s2_0093_duty_withdrawal_write_turns.sql` — ✅ 운영 적용(2026-11-11 · 롤백 시험 뒤 직결). 업무 완성도의 '퇴원보고서 작성' 참고 열: 작성 차례 기록 표 `withdrawal_write_turns`(서버 전용 · 정책 0개) + `staff_tasks` 트리거(작성 차례 할 일이 열리면 새 줄 · 닫히면 마지막 줄을 닫는다 — 보완 요청으로 다시 열려도 앞 차례가 남는다) + 집계 `duty_withdrawal_write_rollup` · 목록 `duty_withdrawal_write_items`(service_role만). 기존 27건은 첫 차례로 그대로 옮겼다(다시 열린 적 0건). 되돌리기 `scripts/_oneoff/revert-s2_0093-duty-withdrawal-write-turns.sql`(모인 기록은 지우지 않는다).
+
+`s2_0092_duty_wording_unify.sql` — ✅ 운영 적용(2026-11-11). 할 일 제목의 낱말을 화면과 같게: `kind_label`('출결 입력' → '출결' · '수업보고서 작성' → '보고서 작성') · `duty_escalate` · `duty_escalate_up`의 제목('기한 초과' · '미이행' → '미처리' · '미처리 확정'). 본문은 운영 DB의 정의 그대로이고 작은따옴표 안의 글자 5줄만 다르다(실행권 · 동작 그대로 · 늦음 할 일 스위치가 꺼져 있어 열린 할 일 0건).
+
+`s2_0091_duty_judged_when_due.sql` — ✅ 운영 적용(2026-11-11). `rollup_rows`의 두 표식(`f_due` · `f_ontime`)을 '때가 된 업무' 기준으로 — 일간 = 수업 끝 · 월간/건별 = 기한. 집계의 `due` = 등급 · %의 분모, `ontime` = 분자(기한 전의 월간 · 건별은 `total − due`로 남아 진행만 보인다).
+
+`s2_0090_duty_class_time_and_reown.sql` — ✅ 운영 적용(2026-11-11). 관리 화면 집계는 **수업이 끝난 일간 업무부터** 센다(`duties_private.rollup_rows` 7칸 겹침 · 6칸은 그것을 부른다 · `duty_rollup_owner_load`만 수업 전 반까지) · `duty_rollup_student_ex` — 뺄 담당을 주면 담당 없는 업무도 뺀다 · `duty_reown_items` — 지난 달 다시 만들기가 평가 개시 전의 닫힌 행 담당을 그날 기준으로 바로잡는다.
+
+`s2_0089_duty_report_rating_rollup.sql` — ✅ 운영 적용(2026-11-11). `duty_report_rating_by_owner` — 작성자 × 과목의 수업보고서 평점 수 · 평균(업무 완성도 참고 열).
+
+`s2_0088_duty_student_exclude_and_lock.sql` — ✅ 운영 적용(2026-11-11). `duty_rollup_student_ex`(학생 집계 + 뺄 담당 — 원어민) · `duty_sync_claim` 잠금 3분 → 6분.
+
+`s2_0087_duty_view_from.sql` — ✅ 운영 적용(2026-11-11 · 침산 값 2026-09-01). `duty_settings.view_from` — 관리 화면에서 볼 수 있는 첫 날(null = 제한 없음).
+
+`s2_0086_duty_due_follow_split.sql` — ✅ 운영 적용(2026-11-11). `duty_upsert_items` — 기한 맞춤을 별도 문장으로(같은 문장에서 이미 고친 행의 기한이 빠지던 것).
+
+`s2_0085_duty_task_wording.sql` — ✅ 운영 적용(2026-11-11). `duty_escalate_up` 할 일 제목의 낱말만('지연' → '기한 초과').
+
+`s2_0084_duty_due_follow.sql` — ✅ 운영 적용(2026-11-11). `duty_upsert_items` — 같은 열쇠의 기한이 달라지면 장부 기한을 맞춘다(기한 규칙 변경: 출결 = 수업 종료 · 발송 = 종료 뒤 24시간).
+
+`s2_0083_duty_resolve_keep_merged.sql` — ✅ 운영 적용(2026-11-11). `duty_resolve_items` — 합쳐서 닫은 행(`merged`)은 다시 열지 않는다.
+
+`s2_0082_duty_review_fixes.sql` — ✅ 운영 적용(2026-11-11). 업무 완성도 종합 리뷰 반영: `mark_dirty`(거래 안 한 번 · 신호는 적었을 때만 · 10분 규칙) + 트리거 6개를 `update of <의무 판정 칸>`으로 · `duty_sync_finish`(실패 뒤 60초 물러서기) · `duty_escalate`(미이행 확정을 월간에도 — s2_0076 본문 + 한 줄) · `duty_note_add`(본인 담당 면제 불가 — s2_0078 본문 + 검사).
+
+`s2_0081_duty_kind_labels.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 할 일 제목의 종류 이름을 화면과 같게(`duties_private.kind_label`: 학생 상담 · 신규생 관리 · 모르는 종류는 '업무').
+
+`s2_0080_duty_live_ping.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 저장 순간 신호: `duties_private.mark_dirty`가 변경 기록을 적으며 `realtime.send`로 지점 채널(`duties:<지점 id>`)에 '바뀌었다'를 보낸다(내용 없음 · 2초에 한 번 · 저장을 막지 않는 블록 안). 그 밖은 s2_0077 본문 그대로.
+
+`s2_0079_duty_owner_load.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 `duty_rollup_owner_load`(담당자 × 과목의 반 수 · 학생 수 — 이름 옆 '수학 · 반 5 · 학생 27').
+
+`s2_0078_duty_manage.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 관리 이력 `duty_notes` + `duty_note_add`(확인 · 사유 · 면제 — 면제 = void `waived`) · `duty_resolve_items`(면제는 맞춤이 되살리지 않는다 — s2_0071 본문 + 한 줄) · `duty_escalate_up`(3일 → 과목 관리자 · 7일 → 원장 · 할 일 `duty_late_up` · 늦음 할 일 스위치가 켜져 있을 때만) · `duties_private.rollup_rows`(고른 기간이 통째로 평가 개시 전이면 개시 전 기한도 센다 — s2_0076 본문 + 한 줄).
+
+`s2_0077_duty_live_sync.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 저장 즉시 반영: 원 표 6개에 바뀐 날만 적는 트리거(`duties_private.mark_dirty` → `duty_dirty` · 저장을 막지 않는다) · `duty_sync_claim`/`duty_sync_finish`(맞춤 잠금 `duty_settings.sync_lock_until` + 증표 `sync_token` · 가져가기는 표식만, 성공한 마무리가 지운다). 같은 날 리뷰 반영으로 다시 적용(첫 판의 5인자 `duty_sync_release`는 원장 확인 뒤 운영에서 지움). 앱 `flushDuties`가 읽기 전에 그날만 맞춘다.
+`s2_0076_duty_due_rollup.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 판정 = 기한 준수율: 집계 3종의 열(total · done · due · ontime · late_done · open_late · expired · over7 · 본문 `duties_private.rollup_rows`) · 건별 의무의 창 = 원래 기한일의 달 · `p_owner_none` · 새 표 `duty_settings`(live_from · late_tasks_on · last_sync_at) · `duty_escalate`는 스위치 켜진 지점만 할 일 생성(이관 의무 제외). s2_0075의 함수 서명을 지우고 다시 만든다.
+`s2_0075_duty_admin_rollup.sql` — ✅ 운영 적용(2026-11-10). 업무 완성도 관리자 화면 집계 3종(`duty_rollup_owner_kind` · `duty_rollup_class` · `duty_rollup_student` · `p_subjects`로 과목 범위 · service_role 전용).
+`s2_0072_duty_task_detail.sql` — `duty_escalate`가 여는 할 일(`duty_late`)의 detail = "<종류> 기한 초과 N건 · MM/DD — 이름 · 이름"(할 일 창의 굵은 줄이 detail을 쓴다). 월말평가 링크 `/grades`.
+
+## 2026-11-10 의무 장부: void 까닭 갱신 (s2_0071 · ✅ 운영 적용 2026-11-10 · 직결 · 시험 거래 뒤)
+
+`s2_0071_duty_resolve_void_reason.sql` — `duty_resolve_items`가 void → void로 까닭(source)만 바뀌어도 `void_reason`을 받아 적는다. 결석으로 빠진 보고서 칸을 "결석"으로 적기 위해(생성기가 void('absent') 행을 넘김). 'not_due'로 먼저 묻힌 3행이 'absent'로 바뀌었다.
+
+## 2026-11-09 의무 장부: 기한 지남 확정은 일간만 (s2_0070 · ✅ 운영 적용 2026-11-09 밤 · 직결 · 시험 거래 뒤 · 되돌림 110행)
+
+`s2_0070_duty_expire_daily_only.sql` — `duty_escalate`의 'due_at + 7일 → void(expired)'에 `period = 'daily'` 조건. 월간(월 상담)·건별(신규생 콜)은 열린 채 늦음으로 남긴다. 첫 생성에서 잘못 확정된 신규생 콜 110행을 다시 열었다. 할 일 링크에 월 상담(`/consultations/new`)·신규생(`/newcomers`) 추가.
+
+## 2026-11-09 업무 완성도 — 의무 장부 duty_items · duty_daily (s2_0069 · ✅ 운영 적용 2026-11-09 밤 · 원장 지시 '직접 cli 적용' · 직결(node · 시험 거래 ROLLBACK → 실제 적용 → 사후 확인: 표 2 · RLS 켬 · 정책 0 · RPC 7 · authenticated 실행권 없음) · 앱보다 먼저)
+
+`s2_0069_duty_ledger.sql` — 학생×종류×회차의 해야 할 일(분모)과 완료(분자)를 한 표에([결정](../../docs/decisions/duties.md)). 표 2개 + 스키마 `duties_private` + RPC 7개(`duty_upsert_items` · `duty_resolve_items` · `duty_void_stale` · `duty_open_cycles` · `duty_escalate` · `duty_snapshot` · `duty_counts`) — 전부 service_role 전용(정책 0개 · 0377a 방식) · 늦음은 `staff_tasks_private.open_task`로 기존 할 일(`duty_late`)을 연다.
+- 확인(2026-11-09): 로컬 PGlite 0.3.16(PG17)에 스텁 표 + 0377a 함수 원문 + 이 파일을 올려 RPC 여섯 개 한 바퀴(열기 멱등 · 담당 갱신 · done/void/되살림 · 지점 격리 · 늦음 → 할 일 열고 닫기 · 스냅숏 · 집계) 통과(`work/pglite-smoke/smoke.mjs`, gitignore).
+- 적용 뒤 확인: `select count(*) from duty_items` (cron `/api/cron/duties`가 5·35분에 돌면 그날 행이 생긴다) · 강사 홈에 '오늘 내 업무' 줄.
+- 되돌리기: 스키마 `duties_private`와 표 `duty_daily` · `duty_items`를 지운다. 할 일 `duty_late` 행은 닫힌 기록이라 그대로 둬도 된다.
 
 ## 2026-11-11 상담 준비 브리프 — 생성 작업 시각 (`s2_0068_prep_brief_job_at.sql` · ✅ 운영 적용 2026-11-11 · 앱보다 먼저 · CLI 직결(node · 한 거래) · 시험 거래(ROLLBACK) 뒤)
 

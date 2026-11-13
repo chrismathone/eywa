@@ -96,12 +96,18 @@ export function isEmptyExtract(e: ContractExtract): boolean {
 }
 
 /**
- * 주민등록번호 마스킹 — 외부 AI로 나가는 계약서 본문에서 `######-#######` 패턴을 지운다
+ * 주민등록번호 마스킹 — 외부 AI로 나가는 계약서 본문에서 13자리 숫자 꼴을 지운다
  * (외부 AI 전송 금지 필드 원칙 — 스캔 OCR 승인(2026-08-03) 시에도 텍스트 단계에선 항상 가린다).
  * 생년월일 6자리는 남긴다(계약 당사자 확인용으로 무해) — 뒤 7자리만 별표.
  */
 export function maskResidentRegNo(text: string): string {
-  return String(text ?? "").replace(/(\d{6})\s*[-–]\s*\d{7}/g, "$1-*******");
+  const digit = "[0-9０-９]";
+  const gap = "[\\s\\u00A0\\u200B-\\u200D]*";
+  // ① 대시로 이은 꼴은 앞뒤에 숫자가 붙어 있어도 **늘** 가린다(종전 규칙 — OCR이 표 테두리·옆 숫자를 붙여 읽은 글자도 덜 가리면 사고).
+  const dashed = new RegExp(`(${digit}{6})${gap}[-–—‐‑−－]${gap}${digit}{7}`, "g");
+  // ② 붙여 쓴 13자리·물결·점으로 이은 꼴은 다른 긴 숫자(계좌·금액 범위·소수)를 자르지 않게 앞뒤가 숫자가 아닐 때만.
+  const loose = new RegExp(`(?<!${digit})(${digit}{6})${gap}(?:[~.]${gap})?${digit}{7}(?!${digit})`, "g");
+  return String(text ?? "").replace(dashed, "$1-*******").replace(loose, "$1-*******");
 }
 
 // ── 구조화 조건(원장 지시 2026-08-03: "정규직·알바·프리랜서별로 다르게, 우다다 인용 금지") ──────

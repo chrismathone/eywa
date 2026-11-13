@@ -59,13 +59,7 @@
 .legend { display: grid; gap: 6px; }
 .legend i { display: inline-block; width: 11px; height: 11px; margin-right: 7px; border-radius: 3px; }
 
-.yearcols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.yearcols article { padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-lg); min-width: 0; }
-.yearcols h3 { margin: 0 0 10px; }
-.eventmini { padding: 12px 0; border-top: 1px solid var(--line-faint); }
-.eventmini > b { display: block; }
-.eventmini p { margin: 4px 0 0; }
-.eventmini button { margin-top: 8px; }
+.deletedRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line-faint); }
 
 .graph { width: 100%; height: 290px; border-radius: var(--radius-lg); background: var(--bg-soft); }
 .graph text { font-family: inherit; font-size: 12px; fill: var(--foreground); }
@@ -79,7 +73,7 @@
 
 @media (max-width: 1000px) { .columns { grid-template-columns: 1fr; } }
 @media (max-width: 650px) {
-  .fields, .yearcols { grid-template-columns: 1fr; }
+  .fields { grid-template-columns: 1fr; }
   .wide { grid-column: auto; }
   .panel { padding: 16px; }
   .body input { max-width: 100%; }

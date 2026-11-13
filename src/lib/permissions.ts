@@ -70,6 +70,7 @@ export const MENU_KEYS = [
   "meetings",
   "documents",
   "class_review",
+  "duties",
   "approvals",
   "calendar",
   "shuttle",
@@ -112,7 +113,7 @@ export const CONNECTED_APP_ACCESS_MESSAGE = "연결 앱 권한은 전체·없음
 
 /**
  * 칸이 **전체·없음만** 뜻이 있는 권한 — 연결 앱(링크를 세우나 마나) · 학원 비서(쓰나 마나) · 셔틀 관리자 화면(여나 마나 — 2026-11-10).
- * 학원 비서는 지점 자료 전부를 읽는 전용 DB 역할로 조회해(`src/features/assistant/server/executor.ts`) '담당'(본인 반만)·'읽기'로 좁힐 수 없다 —
+ * 학원 비서는 묻는 사람의 권한 범위로 조회하지만(전용 DB 역할 + 범위 증표 — `src/features/assistant/server/executor.ts` · s2_0096) '담당'(본인 반만) 자료는 열지 않아 비서 칸 자체를 '담당'·'읽기'로 좁힐 뜻이 없다 —
  * 두 값을 열어 두면 표에는 좁은 값이 적히는데 실제로는 '전체'와 같이 열린다(강사보다 낮은 직급의 '담당' 금지와 같은 까닭).
  * 판정 = `isPermissionLocked`(담당·읽기 잠금) · 칸 순환(`permissionAccessOptions`) · 저장 거절(`onOffAccessMessage`)이 함께 이 함수를 본다.
  */
@@ -172,6 +173,7 @@ export const MENU_LABEL: Record<MenuKey, string> = {
   meetings: "회의록",
   documents: "데이터베이스",
   class_review: "직원 평가",
+  duties: "업무 완성도",
   approvals: "전자결재",
   calendar: "캘린더",
   shuttle: "셔틀",
@@ -319,6 +321,8 @@ export const MENU_ACCESS: AccessMatrix = {
   // 예전 명단 스크립트(scripts/staff-access/grant-class-review.mjs)는 다시 돌리지 말 것 — 거둔 명단이 되살아난다.
   // ⚠️ 개인 예외는 CRUD뿐 아니라 **실명 열람·문항 세트 편집**까지 연다(getReviewPrivileges) — 명단은 최소로.
   class_review: { master: "none", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
+  // 업무 완성도(의무 장부 s2_0069 · 관리자 화면 2026-11-10) — 원장만 기본 전체. 과목 관리자(admin)에게는 원장이 역할·권한 면에서 연다(화면은 담당 과목만 보인다).
+  duties: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 캘린더(학원 공용 일정, 원장 2026-08-18 "일단 캘린더 탭으로 일정부터 관리") — 일정 등록·수정은
   // 사무실(full), 강사·상담·회계·뷰어는 열람(readonly). 학원 일정은 전 직원이 봐야 의미가 있다.
   calendar: { master: "full", admin: "full", manager: "full", teacher: "readonly", counselor: "readonly", accountant: "readonly", viewer: "readonly", parttime: "none", student: "none" },
@@ -375,7 +379,8 @@ export const MENU_ACCESS: AccessMatrix = {
   before_class_checklist: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // 학원 비서(원장 2026-11-09 *"역할에 '비서 추가' 권한은 없네. 기본 디폴트로 원장하고 나머지 비활성화"*) — 새 키 규칙 그대로.
   // 칸은 전체·없음만(isOnOffMenu) · 강사 칸은 잠근다(강사 화면엔 비서 단추가 없다 — isPermissionLocked).
-  // 🔴 비서는 **지점 자료 전부**(급여·계약·연락처·계좌 포함)를 읽는다 — 다른 역할에 열면 그 사람도 전부를 묻고 본다(권한 표 줄 설명이 같은 말을 한다).
+  // 🔴 비서는 **묻는 사람의 지금 권한 범위 안**만 읽는다(2026-11-12 · 앱 + DB 범위 강제 s2_0096 · src/features/assistant/scope.ts) — 원장은 전부(급여·계약·연락처·계좌 포함).
+  //    다른 역할에 열면 그 사람의 메뉴 권한(전체·읽기)만큼 답한다 · '담당'만 허용된 자료는 아직 열지 않는다(권한 표 줄 설명이 같은 말을 한다).
   //    판정 = assistantViewer()(src/features/assistant/server/gate.ts) 한 곳 — 서버 라우트 전부와 셸 레이아웃의 단추·단축키가 같은 함수를 지난다.
   assistant: { master: "full", admin: "none", manager: "none", teacher: "none", counselor: "none", accountant: "none", viewer: "none", parttime: "none", student: "none" },
   // ── 2026-11-09 시안으로 이식한 화면 넷 — 원장 2026-11-10 결정: **원장 '전체' · 나머지 '없음'**(새 권한 규칙 그대로).
@@ -502,6 +507,7 @@ const PATH_SEGMENT_TO_MENU: Record<string, MenuKey> = {
   meetings: "meetings",
   documents: "documents",
   "class-review": "class_review",
+  duties: "duties",
   approvals: "approvals",
   calendar: "calendar",
   shuttle: "shuttle",
@@ -588,8 +594,8 @@ export function isPermissionLocked(menu: MenuKey, role: SystemRole, access: Acce
   if (isStaffRecordLocked(menu, role)) return true;
   // 연결 앱은 링크를 세우나 마나뿐이다 — 담당·읽기는 뜻이 없다(전체 = 보임 · 없음 = 안 보임). 학원 비서도 같다(isOnOffMenu).
   if (isOnOffMenu(menu) && (access === "scoped" || access === "readonly")) return true;
-  // 학원 비서는 강사에게 열 수 없다 — 강사 화면(미니셸)엔 비서 단추·단축키가 없어 열어도 쓸 곳이 없고(저장만 되는 칸),
-  // 비서는 담당 범위 없이 지점 자료 전부를 읽는다(아래 대시보드 강사 잠금과 같은 결).
+  // 학원 비서는 강사에게 열 수 없다 — 강사 화면(미니셸)엔 비서 단추·단축키가 없어 열어도 쓸 곳이 없다(저장만 되는 칸).
+  // (비서가 읽는 자료는 묻는 사람의 권한 범위 안뿐이다 — s2_0096 · 강사의 '담당' 자료는 아직 열지 않는다.)
   if (menu === "assistant" && role === "teacher") return true;
   // 셔틀 관리자 화면은 원장·관리자 칸만 — 학부모 관리 현황의 학부모 계정(로그인 이메일·연락처)은 DB 정책(0320a)이 이 두 역할에게만 읽기를 연다.
   // 다른 역할에 열려면 그 정책을 먼저 넓혀야 한다(화면은 열리는데 목록이 비는 일이 없게).

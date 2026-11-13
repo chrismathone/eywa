@@ -66,6 +66,13 @@ describe("슈퍼관리자 표시 어휘", () => {
     expect(auditDetail("grant_license", { feature: "student_seats", maxSeats: 120 })).toBe("재원생 좌석 최대 120석");
     expect(auditDetail("change_user_role", { role: "teacher" })).toBe("역할 → 강사");
     expect(auditDetail("toggle_license", { feature: "ai_analysis", active: false })).toBe("AI 분석 끔");
+    expect(auditDetail("toggle_license", { feature: "slack", active: true, inboxSkipped: 3, outboxCancelled: 2, rulesReset: 4 })).toBe(
+      "슬랙 알림 연결 켬 · 인박스 3건 건너뜀 · 발송 대기 2건 취소 · 규칙 4개 시작 시각 갱신",
+    );
+    expect(auditDetail("toggle_license", { feature: "slack", active: false })).toBe("슬랙 알림 연결 끔");
+    expect(auditDetail("toggle_license", { feature: "slack", active: false, inboxSkipped: 0 })).toBe(
+      "슬랙 알림 연결 끔 · 인박스 0건 건너뜀",
+    );
     expect(featureLabel("nope")).toBe("기타 기능");
   });
 });

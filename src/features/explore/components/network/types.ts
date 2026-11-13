@@ -73,8 +73,10 @@ export type NetNode = {
   op?: number;
   rScale?: number;
 };
-/** `focusOnly` = 그 선의 한쪽 점이 강조될 때(마우스를 올리거나 고른 점)만 그린다 — 지식그래프 기록 사이 관계선(원장 2026-11-11 *"선도 너무 많아서 정신없는데"*). 이웃 판정(`adjacency`)·요약 판 집계에는 그대로 든다. */
-export type NetEdge = { from: string; to: string; rel: string; w?: number; op?: number; focusOnly?: boolean };
+/** `focusOnly` = 그 선의 한쪽 점이 강조될 때(마우스를 올리거나 고른 점)만 그린다 — 지식그래프 기록 사이 관계선(원장 2026-11-11 *"선도 너무 많아서 정신없는데"*). 이웃 판정(`adjacency`)·요약 판 집계에는 그대로 든다.
+ *  `bundle` = 묶음 사이 모은 선(지식그래프 '묶기' · `kg-net-bundle.ts`) — 굵기 `w` = 그 사이 기록 짝 수. 묶음을 접으면 보이는 위 묶음으로 올려 합친다(layout.ts `visibleGraph`) ·
+ *  요약 판 집계 · 도구줄 연결선 수 · 묶음 안 목록(`netNeighbors`)에는 들지 않는다(같은 관계를 두 번 세지 않게). */
+export type NetEdge = { from: string; to: string; rel: string; w?: number; op?: number; focusOnly?: boolean; bundle?: boolean };
 export type NetGraph = { nodes: NetNode[]; edges: NetEdge[] };
 export type NetBoard = NetGraph & {
   centerId: string;
@@ -146,4 +148,7 @@ export type ExploreNetworkProps = NetInput & {
   labels: boolean;
   onColoredChange: (b: boolean) => void;
   onLabelsChange: (b: boolean) => void;
+  /** 도구줄 '묶기' 켬·끔 — 넘기면(지식그래프) 단추가 선다 · 묶은 선은 부모가 판(`graph`)에 싣는다. */
+  bundle?: boolean;
+  onBundleChange?: (b: boolean) => void;
 };

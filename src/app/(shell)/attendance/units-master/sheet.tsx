@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "
 import { masterMatchesFilter, masterNeedsInput, masterPriority, type MasterClass, type MasterStudent, type UnitsMaster } from "@/features/attendance/units-master";
 import { MasterStudentDetail, TRACK_LABELS as tracks, numberLabel as num, unitsLabel as units, statusLabel as statusText, ownerLabel as ownerName } from "./student-detail";
 import styles from "./sheet.module.css";
+import { useModuleOn } from "@/features/owner/operations-context";
 
 const toolbarButton = `${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`;
 const filters = [["all", "전체"], ["attention", "확인 필요"], ["short", "부족"], ["review", "입력 확인"], ["complete", "월 시수 충족"], ["excess", "초과"], ["unconfirmed", "미확정"]];
@@ -21,6 +22,7 @@ function adjacentMonth(month: string, offset: number) {
 }
 
 export function UnitsMasterSheet({ data, initialSubject }: { data: UnitsMaster; initialSubject?: string }) {
+  const eieOn = useModuleOn("eie");
   const router = useRouter();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
@@ -46,9 +48,10 @@ export function UnitsMasterSheet({ data, initialSubject }: { data: UnitsMaster; 
   useEffect(() => {
     if (wide && selected) container.current?.querySelector("[data-selected]")?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [wide, selected]);
-  const base = useMemo(() => data.classes.filter((c) => (!subject || c.subject === subject) && (!track || c.track === track) && (!classId || c.id === classId))
+  const visibleClasses = useMemo(() => data.classes.filter((c) => eieOn || c.track !== "eie"), [data.classes, eieOn]);
+  const base = useMemo(() => visibleClasses.filter((c) => (!subject || c.subject === subject) && (!track || c.track === track) && (!classId || c.id === classId))
     .map((c) => ({ ...c, students: c.students.filter((s) => `${c.name} ${s.name} ${s.school}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) }))
-    .filter((c) => c.students.length), [data, subject, track, classId, query]);
+    .filter((c) => c.students.length), [visibleClasses, subject, track, classId, query]);
   const all = useMemo(() => base.flatMap((c) => c.students), [base]);
   const groups = useMemo(() => {
     const shown = base.map((c) => ({ ...c, students: c.students.filter((s) => masterMatchesFilter(s, status))
@@ -61,7 +64,7 @@ export function UnitsMasterSheet({ data, initialSubject }: { data: UnitsMaster; 
   const mainColumns = 5 + Number(options.school) + Number(options.future);
   const tableWidth = 136 + (options.school ? 104 : 0) + 88 + 104 + 80 + (options.future ? 96 : 0) + 168 + teacherCount * 104 + (options.seats ? 144 : 0);
   const allCollapsed = groups.length > 0 && groups.every((c) => collapsed.has(c.id));
-  const selectedClass = selected ? data.classes.find((c) => c.id === selected.classId) : undefined;
+  const selectedClass = selected ? visibleClasses.find((c) => c.id === selected.classId) : undefined;
   const student = selectedClass?.students.find((s) => s.id === selected?.studentId);
   const visibleStudents = useMemo(() => groups.flatMap((c) => c.students.map((s) => ({ c, s }))), [groups]);
   const position = visibleStudents.findIndex(({ c, s }) => c.id === selected?.classId && s.id === selected?.studentId);
@@ -101,10 +104,10 @@ export function UnitsMasterSheet({ data, initialSubject }: { data: UnitsMaster; 
         <SearchableSelect ariaLabel="과목" valuePrefix="과목" value={subject} onValueChange={(value) => { setSubject(value); setTrack(""); setClassId(""); setSelected(null); }} triggerClassName={TOOLBAR_SELECT}
           options={[{ value: "", label: "전체" }, { value: "math", label: "수학" }, { value: "english", label: "영어" }]} />
         {subject !== "math" ? <SearchableSelect ariaLabel="영어 유형" valuePrefix="유형" value={track} onValueChange={(value) => { setTrack(value); if (value) setSubject("english"); setClassId(""); setSelected(null); }} triggerClassName={TOOLBAR_SELECT}
-          options={[{ value: "", label: "영어 전체" }, { value: "hourly", label: "인재원" }, { value: "bridge", label: "브릿지" }, { value: "eie", label: "EiE" }]} />
+          options={[{ value: "", label: "영어 전체" }, { value: "hourly", label: "인재원" }, { value: "bridge", label: "브릿지" }, ...(eieOn ? [{ value: "eie", label: "EiE" }] : [])]} />
         : null}
         <SearchableSelect ariaLabel="반" valuePrefix="반" value={classId} onValueChange={(value) => { setClassId(value); setSelected(null); }} className="max-w-64" triggerClassName={TOOLBAR_SELECT}
-          options={[{ value: "", label: "전체 반" }, ...data.classes.filter((c) => (!subject || c.subject === subject) && (!track || c.track === track)).map((c) => ({ value: c.id, label: c.name }))]} />
+          options={[{ value: "", label: "전체 반" }, ...visibleClasses.filter((c) => (!subject || c.subject === subject) && (!track || c.track === track)).map((c) => ({ value: c.id, label: c.name }))]} />
         <PeriodNav label={`${data.month.slice(0, 4)}년 ${Number(data.month.slice(5))}월`}
           prevHref={monthHref(adjacentMonth(data.month, -1))} nextHref={monthHref(adjacentMonth(data.month, 1))} currentHref={monthHref(data.asOf.slice(0, 7))}
           relation={data.month === data.asOf.slice(0, 7) ? "current" : data.month < data.asOf.slice(0, 7) ? "past" : "future"}
@@ -187,7 +190,7 @@ export function UnitsMasterSheet({ data, initialSubject }: { data: UnitsMaster; 
       <p><b>입력 확인</b>은 지난 교시의 미입력, 담당 불명, 일별·교시 기록 겹침, 세션 날짜·배분 불일치를 뜻합니다. 숫자가 같아도 확인 사항이 있으면 충족으로 단정하지 않습니다.</p>
       <p>미확정 학생의 입력 확인 사항도 따로 셉니다. ‘입력 확인’과 ‘미확정’에는 같은 학생이 함께 포함될 수 있습니다. ‘확인 우선’은 입력 문제와 부족·초과가 있는 학생부터 보여 줍니다.</p>
       <p><b>부족</b>은 남은 예정까지 진행해도 시수가 남는 경우입니다. 월말에는 실제 이수와 발생 시수의 차이를 확인할 수 있습니다.</p>
-      <p>수학은 55분 교시=0.5U, 2교시=1U, 3교시=1.5U입니다. 인재원 영어의 50분 교시는 1시간으로 인정합니다. 브릿지·EiE는 40분=1U, 60분=1.5U입니다. EiE 등록은 요일별 4회이며 날짜 배정이 맞지 않으면 확인 대상으로 표시합니다.</p>
+      <p>수학은 55분 교시=0.5U, 2교시=1U, 3교시=1.5U입니다. 인재원 영어의 50분 교시는 1시간으로 인정합니다. 브릿지는 40분=1U, 60분=1.5U입니다.{eieOn ? " EiE도 40분=1U, 60분=1.5U이며 요일별 4회 날짜 배정을 확인합니다." : ""}</p>
       <p>운영 시수는 반별 세션 기간으로 봅니다. 회차 확정의 청구 시수 대조는 달력월 기준이며, *LAB 포함 여부도 달라 합계가 다를 수 있습니다.</p>
     </div></SheetContent></Sheet>
   </div>;

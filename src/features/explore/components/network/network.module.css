@@ -10,6 +10,7 @@
   --net-edge: color-mix(in srgb, var(--neutral-fill) 80%, var(--card));
   --net-edge-hi: var(--primary);
   --net-edge-cross: var(--cat-purple);
+  --net-edge-bundle: color-mix(in srgb, var(--primary) 70%, var(--card));
   --net-node: var(--neutral-fill);
   --net-node-near: color-mix(in srgb, var(--purple) 70%, var(--neutral-fill));
   --net-chosen: var(--primary);
@@ -44,6 +45,7 @@
   --net-edge: color-mix(in srgb, var(--primary-foreground) 40%, var(--primary));
   --net-edge-hi: var(--gold-bright);
   --net-edge-cross: color-mix(in srgb, var(--cat-purple) 55%, white);
+  --net-edge-bundle: color-mix(in srgb, var(--primary-foreground) 55%, var(--primary));
   --net-node: color-mix(in srgb, var(--primary-foreground) 65%, var(--primary));
   --net-node-near: color-mix(in srgb, var(--primary-foreground) 82%, var(--primary));
   --net-chosen: #ffffff;
@@ -157,6 +159,17 @@
 
 .btn:hover {
   box-shadow: var(--shadow-card-hover);
+}
+
+/* 켬·끔 단추('묶기') — 켜지면 보기 전환 단추와 같은 칠. */
+.btn[aria-pressed="true"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ── 판 ── */

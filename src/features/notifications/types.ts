@@ -38,6 +38,7 @@ export type NotificationType =
   | "report_send_failed" // 수업 보고서 ClassNote 발송 최종 실패 → 담당 강사 폴백 master(0143a, DB 트리거)
   | "notice_send_failed" // 학부모 공지 게시 실패/일부실패 → 담당 강사(자기 학생) + 발송자(0144a, DB 트리거)
   | "makeedu_login_failed" // makeedu 접속(로그인) 실패 → master(연동 PC 헬스체크 check-session.mjs, 하루 1회)
+  | "student_seat_limit_exceeded" // makeedu 신규 재원생 반영 후 좌석 초과 → 재직 원장
   | "sync_agent_offline" // 연동 PC 워커 신호가 15분 넘게 끊김 → 그 지점 원장 전원(정기 점검 10분마다 · KST 09~24시 · 끊김 한 번에 한 번 · 끈 연동은 제외 · 2026-11-09)
   | "class_delegation" // 결근 대체로 반을 임시 위임받음 → 대체 강사(0173a, createClassDelegation)
   // 학부모의 결석·지각·조퇴 연락(클래스노트) → **직원 설정에서 토글을 켠 계정 전원**(0184a).
@@ -113,6 +114,7 @@ export const NOTIFICATION_ICON: Record<string, AywaIconName> = {
   report_send_failed: "alert",
   notice_send_failed: "alert",
   makeedu_login_failed: "alert",
+  student_seat_limit_exceeded: "alert",
   sync_agent_offline: "alert",
   student_attendance_notice: "userMinus",
   attendance_absent_desk: "userMinus",

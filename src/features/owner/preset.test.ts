@@ -16,7 +16,8 @@ import { baseSettingsFor, isGenericTenant, prepareSectionForSave, presetOfStored
 import { resolveSettings } from "./resolve";
 import { CHINSAN_SCHOOL_SAVE_ALIASES } from "@/features/schools/school-name";
 import { settingsToPeriodsConfig, weekdayTableFor, isPerPeriodSubject } from "@/features/timetable/lib/periods";
-import { MODULE_IDS } from "@/lib/modules";
+import { GENERIC_DISABLED_MODULES, MODULE_BASELINE_V1, MODULE_IDS, isModuleEnabled } from "@/lib/modules";
+import { isRawModuleEnabled } from "../../../scripts/_shared/module-state.mjs";
 
 /** 침산 저장 행의 모양 — 09-22 읽기 전용 실측의 **섹션 구성**(값은 대표 몇 칸). preset·modules 키가 없다. */
 const CHINSAN_LIKE_ROW = {
@@ -222,6 +223,7 @@ describe("일반판 — 새로 연 학원", () => {
   });
 
   it("모듈은 꺼진 채 태어나고, 보강은 독립 운영 모드로 꺼져 있으며 수업 규칙은 중립", () => {
+    expect(g.modules.disabled).toEqual(GENERIC_DISABLED_MODULES);
     expect([...g.modules.disabled].sort()).toEqual(MODULE_IDS.filter(id => id !== "makeups").sort());
     expect(g.makeups.mode).toBe("off");
     expect(DEFAULT_SETTINGS.makeups.mode).toBe("off");
@@ -258,6 +260,37 @@ describe("일반판 — 새로 연 학원", () => {
   it("원장이 켠 모듈만 켜진다 — 모르는 id는 버린다", () => {
     const on = resolveSettings({ preset: "generic", modules: { disabled: ["shuttle", "bogus", "shuttle"] } }, { name: "N" });
     expect(on.modules.disabled).toEqual(["shuttle"]);
+    expect(on.modules.known).toEqual(MODULE_BASELINE_V1);
+  });
+
+  it("폼이 보낸 known만 정규화하고, known 없는 옛 폼은 기존 값 또는 v1 기준을 보존한다", () => {
+    const parsed = { disabled: ["shuttle"], known: [] };
+    const current = prepareSectionForSave("generic", "modules", { disabled: ["shuttle"], known: ["shuttle", "bogus"] }, parsed, {}) as Record<string, unknown>;
+    expect(current.known).toEqual(MODULE_BASELINE_V1);
+
+    const oldWithStored = prepareSectionForSave(
+      "generic",
+      "modules",
+      { disabled: ["shuttle"] },
+      parsed,
+      { disabled: [], known: [...MODULE_BASELINE_V1, "bogus"] },
+    ) as Record<string, unknown>;
+    expect(oldWithStored.known).toEqual(MODULE_BASELINE_V1);
+    const oldWithoutStored = prepareSectionForSave("generic", "modules", { disabled: [] }, parsed, { disabled: [] }) as Record<string, unknown>;
+    expect(oldWithoutStored.known).toEqual(MODULE_BASELINE_V1);
+  });
+
+  it("앱과 raw JSON을 읽는 워커가 같은 실효 모듈 판정을 쓴다", () => {
+    const fixtures = [
+      null,
+      { preset: "generic" },
+      { preset: "generic", modules: { disabled: ["classnote"] } },
+      { preset: "generic", modules: { disabled: [], known: ["bogus"] } },
+    ];
+    for (const stored of fixtures) {
+      const app = resolveSettings(stored, { name: "시험" });
+      expect(isRawModuleEnabled(stored, "classnote")).toBe(isModuleEnabled(app.modules.disabled, "classnote"));
+    }
   });
 
   it("일반판 기본값 문서가 침산 기본값을 변형하지 않는다(공유 참조)", () => {

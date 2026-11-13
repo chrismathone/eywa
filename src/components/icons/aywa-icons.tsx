@@ -1309,6 +1309,8 @@ export const MENU_ICON = {
   meetings: "note",
   documents: "folder",
   class_review: "star", // 수업 평가 — 옛 clipboardCheck는 출석부와 같은 그림이라 나란히 서면 구분이 안 됐다
+  // 업무 완성도 — 완료율(%) 배지. 남은 스티커(alert·trash)는 뜻이 다르고 gauge는 평가 면이 쓴다 → 선화 폴백(menu-glyph.test.ts PENDING_GLYPH).
+  duties: "percentBadge",
   approvals: "scrollText", // 전자결재 — 결재 문서(두루마리) 정체성
   calendar: "calendar", // 캘린더 — 학원 공용 일정
   shuttle: "bus", // 셔틀(노랑버스) — 노선 편성·등하원 기록

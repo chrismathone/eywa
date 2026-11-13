@@ -26,6 +26,16 @@ const configured: NavigationSettings = {
   groups: [{ id: "custom-office", label: "교무실", icon: "folder" }], teacherMenus: [],
 };
 
+it("관리자 모바일 메뉴는 원생·상담 통계를 직접 열고 다른 상담 입구도 표시한다", () => {
+  render(<MobileTopNav systemRole="admin" email="test@example.com" />);
+  fireEvent.click(screen.getByLabelText("메뉴 열기"));
+  expect(within(screen.getByRole("region", { name: "원생" })).getByRole("link", { name: "원생 통계" }))
+    .toHaveAttribute("href", "/students/stats");
+  const counsel = within(screen.getByRole("region", { name: "상담·재원" }));
+  expect(counsel.getByRole("link", { name: "상담 통계" })).toHaveAttribute("href", "/consultations/stats");
+  expect(counsel.getByRole("link", { name: "신규 콜&상담" })).toHaveAttribute("href", "/enrollment");
+});
+
 describe("실제 설정 편집기", () => {
   it("탭 추가 → 이름·아이콘 변경 → 기존 메뉴 이동 → 적용 payload", () => {
     const save = vi.fn();

@@ -3,6 +3,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getSheetsApi } from "@/features/integrations/google-sheets";
 import { reportWarning } from "@/lib/observability/report-error";
+import { getLicenseFlags } from "@/lib/license/server";
 import { monthTabKey } from "../withdrawal-sheet-model";
 import { buildSheetExitRecords, SHEET_LAST_MONTH, sheetTeacherIndexOf, type SheetExitRecord, type SheetTeacherIndex } from "../sheet-teachers";
 import { isSheetTenant, spreadsheetIdOf } from "./withdrawal-sheet";
@@ -44,7 +45,13 @@ export const loadSheetExits = cache(async (tenantId: string): Promise<SheetExitR
   const spreadsheetId = spreadsheetIdOf();
   if (!spreadsheetId) return null;
   try {
-    if (!(await isSheetTenant(tenantId))) return null;
+    // 모든 소비처가 이 공용 입구를 거친다. 꺼진 지점에서는 서비스 계정으로 시트를 읽지 않는다.
+    // 지점별 캐시 표도 조회 실패를 전부 켜짐으로 접으므로 기존 허용 정책은 그대로다.
+    const [sheetTenant, licenseFlags] = await Promise.all([
+      isSheetTenant(tenantId),
+      getLicenseFlags(tenantId),
+    ]);
+    if (!sheetTenant || !licenseFlags.google_sheets) return null;
     // 시트가 느려도 화면을 붙잡지 않는다 — 4초 넘으면 이번엔 에이와 판정으로.
     const entries = await Promise.race([
       loadEntries(spreadsheetId),

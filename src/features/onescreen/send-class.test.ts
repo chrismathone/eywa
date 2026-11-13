@@ -137,8 +137,9 @@ describe("sendClassGateRow — 관리자 일괄 게이트(워커와 같은 판�
     expect(sendClassGateRow({ ...row, makeupClassId: "m", makeupLive: true })).toEqual({ pass: true, rewriteTo: "m" });
     expect(sendClassGateRow({ ...row, storedId: "m", makeupClassId: "m", makeupLive: true })).toEqual({ pass: true, rewriteTo: null });
   });
-  it("🔴 적힌 '보낼 반'이 보강 반과 다르면 막는다(보고서 반 ≠ 발송 반 — C9)", () => {
-    expect(sendClassGateRow({ ...row, storedId: "s", storedLive: true, makeupClassId: "m", makeupLive: true })).toEqual({ pass: false, rewriteTo: null });
+  it("보강 반과 다른 전달 반은 별도로 검증됐을 때만 통과한다", () => {
+    expect(sendClassGateRow({ ...row, storedId: "s", storedLive: true, makeupClassId: "m", makeupLive: false })).toEqual({ pass: true, rewriteTo: null });
+    expect(sendClassGateRow({ ...row, storedId: "s", storedLive: false, makeupClassId: "m", makeupLive: true })).toEqual({ pass: false, rewriteTo: null });
   });
   it("🔴 반 미정 보강은 적힌 '보낼 반'이 살아 있어도 막는다", () => {
     expect(sendClassGateRow({ ...row, storedId: "s", storedLive: true })).toEqual({ pass: false, rewriteTo: null });
@@ -156,14 +157,14 @@ describe("🔴 앱 ↔ 워커 한 규칙 — 게이트가 통과시킨 행만 �
   it("통과 ⇔ 워커 class · 반 = (정규: 보고서 반 / 보강: 보강 반) · 막힘 ⇔ 워커 blocked(1인 보드로 흘리지 않는다)", () => {
     const B = [true, false];
     let n = 0;
-    for (const hasClass of B) for (const classLive of B) for (const hasStored of B) for (const storedIsMakeup of B) for (const hasMakeup of B) for (const makeupLive of B) for (const sent of B) {
+    for (const hasClass of B) for (const classLive of B) for (const hasStored of B) for (const storedIsMakeup of B) for (const hasMakeup of B) for (const makeupLive of B) for (const sent of B) for (const deliveryLive of B) {
       n++;
       const makeupClassId = hasMakeup && !hasClass ? "m" : null;
       const r = {
         classId: hasClass ? "c" : null,
         classLive: hasClass && classLive,
         storedId: hasStored ? (storedIsMakeup && makeupClassId ? makeupClassId : "s") : null,
-        storedLive: hasStored,
+        storedLive: hasStored && deliveryLive,
         makeupClassId,
         makeupLive: !!makeupClassId && makeupLive,
         sentAt: sent ? "2026-09-29" : null,
@@ -177,12 +178,13 @@ describe("🔴 앱 ↔ 워커 한 규칙 — 게이트가 통과시킨 행만 �
         sendClassId: storedAfter,
         makeupClassId: r.makeupClassId,
         makeupEligible: r.makeupLive,
+        sendEligible: r.storedLive,
       });
       expect(worker.route === "class").toBe(g.pass);
       expect(worker.route === "personal").toBe(false); // 반별 경로에서 1인 보드로 새지 않는다
-      if (g.pass) expect(worker.classId).toBe(r.classId ?? r.makeupClassId);
+      if (g.pass) expect(worker.classId).toBe(r.classId ?? storedAfter ?? r.makeupClassId);
     }
-    expect(n).toBe(128);
+    expect(n).toBe(256);
   });
   it("앱(decideSendClass)이 보내겠다고 한 반 = 워커가 올리는 반(보강 반)", () => {
     const app = decideSendClass({ candidates: ["a"], makeupClassId: "m", makeupLive: true, main: "a" });

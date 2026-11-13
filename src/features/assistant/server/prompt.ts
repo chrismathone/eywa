@@ -28,7 +28,17 @@ export function catalogLines(docs: readonly AssistantTableDoc[], views: Readonly
 /**
  * 🔴 사실 원칙(`FACT_GUARD`)을 맨 앞에 붙인다 — generateJSON을 거치지 않는 자체 루프라 직접 잇는다(CLAUDE.md '사실 원칙').
  */
-export function buildSystemPrompt(catalog: string): string {
+/**
+ * 권한 범위 규칙(s2_0096) — 묻는 사람이 일부 자료만 볼 때만 붙인다(원장은 없다 → 원장의 캐시 앞부분은 그대로).
+ * 범위마다 글자가 같아 캐시를 깨지 않는다(사람·날짜 없음).
+ */
+export const SCOPE_RULES = `## 권한 범위 — 🔴 묻는 분은 권한이 허락한 자료만 볼 수 있다
+- 아래 '보기 목록'이 묻는 분이 볼 수 있는 전부다. 목록에 없는 자료(급여·수납·다른 메뉴 등)는 조회하지 않는다 — 조회하면 '○○ 권한이 있어야 볼 수 있는 자료입니다'로 돌아온다.
+- 권한 밖이라 보지 못한 것은 0건·없음·정상으로 쓰지 않는다. "'○○' 권한이 있어야 볼 수 있어 확인하지 않았습니다"로 밝히고, 볼 수 있는 자료로 답할 수 있는 만큼만 답한다.
+- 보지 못한 자료의 내용·건수·존재를 짐작해 쓰지 않는다. 표 구조(describe_table)에 없는 칸은 권한 밖이라 값이 비어 나온다 — 그 칸을 '비어 있다'로 쓰지 않는다.
+- 권한을 넓혀 달라는 부탁에는 "권한은 원장이 학원 설정 → 역할·권한에서 정합니다"라고만 답한다.`;
+
+export function buildSystemPrompt(catalog: string, opts: { limited?: boolean } = {}): string {
   return withFactGuard(`너는 학원 운영 시스템 'aywa'의 학원 비서다. 질문한 직원이 지금 알아야 할 사실과 내려야 할 판단을 파악하고, 이 지점 DB를 직접 조회해 답한다.
 곁에서 일하는 비서로서 "이렇게 처리하시면 좋겠습니다"를 데이터에 근거해 제안하고, 그 답을 화면에 맞는 보고서로 낸다.
 형식적인 보고서 작성기가 아니다 — 숫자를 늘어놓는 데서 멈추지 말고, 그 숫자가 묻는 사람에게 무슨 뜻인지, 무엇부터 누구에게 맡기면 좋을지를 말한다.
@@ -232,7 +242,7 @@ ${ADVICE_CHECK_RULES}
   - 제목·이름 칸(보고서·차트·표 제목 · 칸 이름 · KPI · 담당)과 SQL에는 쓰지 않는다(서버가 벗긴다). 표시 글자는 글자 수에 세지 않는다.
 
 ${ONTOLOGY_MAP}
-
+${opts.limited ? `\n${SCOPE_RULES}\n` : ""}
 ## 이 지점 DB의 보기(표) 목록
 ${catalog}`);
 }
@@ -252,7 +262,8 @@ export function questionMessage(question: string, now: Date = new Date(), asker?
   return `오늘은 ${ymd}(${WEEKDAY[kst.getUTCDay()]}) · 지금 ${hm}(한국 시간)${who}\n\n질문: ${question}`;
 }
 
-export type PastTurn = { question: string; report: AssistantReport | null; queries: Pick<QueryResult, "id" | "purpose" | "sql">[] };
+/** `scopeKeys` = 그 차례 답이 쓴 자료의 묶음 키(s2_0096 · null = 표지 전 옛 답) — 이어 묻기 답의 저장 표지에 합친다(앞 답의 숫자를 다시 말할 수 있다). */
+export type PastTurn = { question: string; report: AssistantReport | null; queries: Pick<QueryResult, "id" | "purpose" | "sql">[]; scopeKeys?: readonly string[] | null };
 
 /**
  * 지난 대화 한 차례를 다음 질문이 이어 쓸 수 있는 짧은 글로(도구 기록 전체를 다시 보내지 않는다).

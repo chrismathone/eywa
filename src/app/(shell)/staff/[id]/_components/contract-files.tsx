@@ -29,10 +29,12 @@ export function ContractFiles({
   userId,
   files,
   canWrite,
+  aiOn,
 }: {
   userId: string;
   files: ContractFileRow[];
   canWrite: boolean;
+  aiOn: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -65,7 +67,7 @@ export function ContractFiles({
         toast.error(res.error);
         return;
       }
-      toast.success(res?.notice ?? "계약서를 보관했습니다 — 계약에 반영하려면 '계약서 PDF 불러오기'를 쓰세요");
+      toast.success(res?.notice ?? (aiOn ? "계약서를 보관했습니다 — 계약에 반영하려면 '계약서 PDF 불러오기'를 쓰세요" : "계약서를 보관했습니다"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "업로드에 실패했습니다");
     } finally {
@@ -125,7 +127,7 @@ export function ContractFiles({
               onClick={() => inputRef.current?.click()}
               disabled={busy}
               className="border-line text-text-dim hover:border-primary/40 hover:text-primary inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs transition disabled:opacity-50"
-              title="계약서 PDF를 파일로만 보관합니다 — 계약 기간·조건에 반영하려면 계약 기입의 '계약서 PDF 불러오기'를 쓰세요"
+              title={aiOn ? "계약서 PDF를 파일로만 보관합니다 — 계약 기간·조건에 반영하려면 계약 기입의 '계약서 PDF 불러오기'를 쓰세요" : "계약서 PDF를 파일로 보관합니다"}
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
               {busy ? "올리는 중…" : "계약서 올리기"}

@@ -31,6 +31,8 @@ export type Turn = {
   queries: QuerySummary[];
   report: SettledReport | null;
   error: string | null;
+  /** 이 화면에서 물어 받은 답(저장본을 다시 연 것이 아니다) — '강도 올려 다시 묻기'는 이번에 받은 답에만 권한다(2026-11-12). */
+  live?: boolean;
 };
 
 export type Conversation = {
@@ -105,7 +107,7 @@ export type AssistantAction =
   | { type: "conv/loading"; key: string }
   | { type: "conv/loaded"; key: string; detail: ThreadDetailResponse }
   /** `gone` = 대화가 없다(다른 곳에서 지웠다) — 도는 표시를 풀고 목록에서 뺀다. */
-  | { type: "conv/failed"; key: string; error: string; gone?: boolean }
+  | { type: "conv/failed"; key: string; error: string; gone?: boolean; denied?: boolean }
   | { type: "ask/start"; convKey: string; turn: Turn }
   | { type: "ask/event"; turnKey: string; event: AskEvent; now: string }
   | { type: "ask/broken"; turnKey: string }
@@ -245,6 +247,17 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       // 🔴 이 대화에서 답을 받는 중이면 그 차례는 남긴다(로컬이 저장본보다 새롭다) — 저장본의 '도는 중' 같은 질문은 뺀다.
       const live = conv.turns.find((t) => state.inflight.includes(t.key));
       let turns = action.detail.messages.map(turnFromMessage);
+      // '이번 화면에서 받은 답' 표시를 저장본에도 옮겨 붙인다 — 흐름이 끊겨 저장본으로 되살린 답에서 '강도 올려 다시 묻기'가 사라졌다
+      // (휴대폰에서 다른 앱에 다녀오면 흔한 길 · 적대 리뷰 2026-11-12). 번호가 같으면 같은 차례 · 번호 전에 끊긴 차례는 같은 질문 글의 마지막 것.
+      const liveIds = new Set(conv.turns.filter((x) => x.live && x.messageId).map((x) => x.messageId));
+      const liveNoId = conv.turns.filter((x) => x.live && !x.messageId).map((x) => x.question);
+      // 번호 없이 붙일 때는 이 화면이 몰랐던(새로 생긴) 줄에만 — 시작 전에 막힌 같은 글 때문에 어제 답에 붙지 않게(재리뷰).
+      const knownIds = new Set(conv.turns.map((x) => x.messageId).filter(Boolean));
+      turns = turns.map((x) => (x.messageId && liveIds.has(x.messageId) ? { ...x, live: true } : x));
+      for (const q of liveNoId) {
+        const at = turns.findLastIndex((x) => x.question === q && !x.live && !!x.messageId && !knownIds.has(x.messageId));
+        if (at >= 0) turns[at] = { ...turns[at]!, live: true };
+      }
       if (live) {
         // 같은 차례 = 질문 번호가 같은 것(같은 글을 두 번 물은 차례를 잘못 빼지 않게 — 적대 리뷰 2026-11-06).
         // 번호(`started`)를 받기 전에만 '도는 중 + 같은 질문 글'로 맞춘다.
@@ -275,7 +288,8 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       );
       return {
         ...state,
-        conversations: { ...state.conversations, [action.key]: { ...conv, turns, load: "error", loadError: action.error } },
+        // 권한이 없어졌으면(denied) 차례를 비운다 — 옛 답·표가 화면에 남지 않게.
+        conversations: { ...state.conversations, [action.key]: { ...conv, turns: action.denied ? [] : turns, load: "error", loadError: action.error } },
         ...(action.gone && conv.threadId ? { threads: state.threads.filter((t) => t.id !== conv.threadId) } : {}),
       };
     }

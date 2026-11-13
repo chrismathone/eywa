@@ -10,8 +10,8 @@ import { toKgPrefPatch, type KgGraphPrefs } from "./graph-prefs";
 export async function saveKgGraphPrefs(patch: Partial<KgGraphPrefs>): Promise<{ ok: boolean; error?: string }> {
   if (!patch || typeof patch !== "object") return { ok: false, error: "잘못된 값입니다" };
   const clean: Partial<KgGraphPrefs> = {};
-  for (const k of ["netView", "colored", "labels"] as const) if (k in patch) (clean as Record<string, unknown>)[k] = patch[k];
+  for (const k of ["netView", "colored", "labels", "bundle"] as const) if (k in patch) (clean as Record<string, unknown>)[k] = patch[k];
   if (clean.netView !== undefined && clean.netView !== "records" && clean.netView !== "summary") return { ok: false, error: "잘못된 값입니다" };
-  for (const k of ["colored", "labels"] as const) if (clean[k] !== undefined && typeof clean[k] !== "boolean") return { ok: false, error: "잘못된 값입니다" };
+  for (const k of ["colored", "labels", "bundle"] as const) if (clean[k] !== undefined && typeof clean[k] !== "boolean") return { ok: false, error: "잘못된 값입니다" };
   return patchMyUiPrefs("knowledgeGraph", toKgPrefPatch(clean));
 }

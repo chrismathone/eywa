@@ -4,13 +4,19 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+## 연동 PC 배포 원칙 (사용자 지시 2026-10-13, 재확인 2026-11-12)
+
+- 수동 워커 ZIP 전달·압축 해제·스크립트 덮어쓰기 방식은 폐기했다. 워커 코드 변경도 **AywaSync 앱의 버전·릴리스 순번을 올려 정식 업데이트**로 전달한다.
+- 현재 절차의 기준은 `apps/sync-agent/README.md`이다. 예전 ClassNote 문서·주석의 ZIP 이관 안내보다 이 규칙을 우선한다. 앱이 내부에서 사용하는 서명된 업데이트 아카이브는 수동 워커 전달과 별개다.
+- 워커 SQL을 바꾸면 `scripts/_sync-agent/build-query-catalog.cjs`로 서버 허용 질의 목록을 갱신하고 실제 원격 어댑터·서버 컴파일러를 통한 검증을 한다. 웹/API를 먼저 반영한 뒤 새 앱 버전을 게시한다.
+
 ## 검증 범위 원칙 (사용자 지시, 2026-10-22)
 
 - 간단한 문구·라벨·스타일·배치 수정에 프로젝트 전체 타입 검사나 전체 테스트를 실행하지 않는다.
 - 기본 검증은 변경 파일의 린트·타입 검사와 직접 영향받는 기능의 필요한 확인으로 제한한다. 타입 검사에 필요한 의존성은 포함할 수 있다.
 - 공통 타입·공용 기반 구조·빌드 설정 변경 등 전체 영향의 근거가 있거나 사용자가 요청한 경우에만 전체 검사를 실행한다. 단순히 확인을 더 한다는 이유로 범위를 넓히지 않는다.
 - 적절한 검증이 통과하면 새 변경이나 구체적인 오류·우려가 없는 한 검사를 반복하거나 확대하지 않는다.
-- 이 범위의 검사는 `pnpm verify` 한 번으로 돈다(바뀐 파일 린트 · 바뀐 TS와 그 import·역의존의 타입 · 관련 테스트·파일 이름을 적은 테스트·폴더를 훑는 가드 · main의 기존 실패는 기준선과 비교해 따로 보인다). 전체 타입은 `pnpm verify --all-types`. 자세한 것은 `docs/setup-and-ops.md` "검증 게이트".
+- 이 범위의 검사는 `pnpm verify` 한 번으로 돈다(바뀐 파일 린트 · 바뀐 TS와 그 import·역의존의 타입 · 관련 테스트·파일 이름을 적은 테스트·폴더를 훑는 가드 · main의 기존 실패는 기준선과 비교해 따로 보인다). 전체 타입은 `pnpm verify --all-types`. node_modules가 정션인 워크트리에서는 `node scripts/verify-changed.mjs`로 부른다(pnpm이 공용 `.bin`을 다시 쓴다). 자세한 것은 `docs/setup-and-ops.md` "검증 게이트".
 
 ## 일반 화면의 문구 원칙 (사용자 지시, 2026-10-02)
 

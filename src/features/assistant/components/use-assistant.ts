@@ -158,7 +158,8 @@ export function useAssistant({ open }: { open: boolean }) {
     if (!quiet) dispatch({ type: "conv/loading", key });
     try {
       const res = await fetch(`${API}/threads/${encodeURIComponent(threadId)}`, { cache: "no-store" });
-      if (!res.ok) return dispatch({ type: "conv/failed", key, error: await errorText(res, "대화를 불러오지 못했습니다"), gone: res.status === 404 });
+      // 403 = 학원 비서를 쓸 권한이 없어졌다 — 보던 대화 내용을 화면에서 비운다(권한이 줄어든 뒤 옛 답이 남지 않게 · s2_0096).
+      if (!res.ok) return dispatch({ type: "conv/failed", key, error: await errorText(res, "대화를 불러오지 못했습니다"), gone: res.status === 404, denied: res.status === 403 });
       const detail = (await res.json()) as ThreadDetailResponse;
       if (!detail?.thread || !Array.isArray(detail.messages)) return dispatch({ type: "conv/failed", key, error: "대화를 읽지 못했습니다." });
       dispatch({ type: "conv/loaded", key, detail });
@@ -188,7 +189,7 @@ export function useAssistant({ open }: { open: boolean }) {
    * 화면이 보낸 글을 입력칸에 되돌린다 · 원장 2026-11-06 *"정상적인 동작으로 인식되게"*). 다른 탭에서 도는 대화를 알게 목록도 다시 읽는다.
    */
   const ask = useCallback(
-    async (input: { convKey: string; threadId: string | null; question: string; onBusy?: (message: string) => void }) => {
+    async (input: { convKey: string; threadId: string | null; question: string; redoOf?: string | null; onBusy?: (message: string) => void }) => {
       const question = clipText(input.question.trim(), ASSISTANT_QUESTION_MAX);
       if (!question) return;
       const s = stateRef.current;
@@ -224,6 +225,7 @@ export function useAssistant({ open }: { open: boolean }) {
           queries: [],
           report: null,
           error: null,
+          live: true,
         },
       });
 
@@ -231,7 +233,7 @@ export function useAssistant({ open }: { open: boolean }) {
       /** 끝 이벤트(report·error)를 받았거나 이유가 확정됐나 — 아니면 끊긴 것이다. */
       let settled = false;
       try {
-        const body: AskBody = { threadId, question, clientRef: run.clientRef };
+        const body: AskBody = { threadId, question, clientRef: run.clientRef, ...(input.redoOf ? { redoOf: input.redoOf } : {}) };
         const res = await fetch(`${API}/ask`, {
           method: "POST",
           headers: { "content-type": "application/json", accept: "application/x-ndjson" },

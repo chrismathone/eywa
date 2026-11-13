@@ -11,6 +11,7 @@ import type { StaffRow } from "@/features/staff/server/queries";
 import { StaffRowLink } from "./staff-row-link";
 import { useStaffViewPrefs } from "./staff-view-prefs";
 import { normalizeOrder, visibleColumns, type StaffColumnKey } from "@/features/staff/list/columns";
+import { phoneLabel } from "@/lib/format/phone";
 
 const CELL = "px-3 py-2.5";
 
@@ -59,7 +60,7 @@ export function StaffTable({ rows }: { rows: StaffRow[] }) {
       <span className="num">{s.email.toLowerCase().endsWith("@imported.local") ? "미설정" : s.email}</span>
     ),
     hireDate: (s) => <span className="num">{s.hireDate ?? "—"}</span>,
-    phone: (s) => <span className="num">{s.phone ?? "—"}</span>,
+    phone: (s) => <span className="num">{phoneLabel(s.phone) ?? "—"}</span>,
     contract: (s) =>
       s.contractStart && s.contractEnd ? (
         <span className="num">

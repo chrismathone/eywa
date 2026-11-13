@@ -187,17 +187,17 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
   {
     name: "marketing_archive_events",
     label: "홍보 행사",
-    ko: "홍보·마케팅 행사 기록(설명회·학원행사·전단배부·특수마케팅 등) — 행사마다 최신 한 줄",
+    ko: "홍보·마케팅 행사 기록(설명회·학원행사·전단배부·특수마케팅 등) — 행사마다 최신 한 줄. 일반 조회·집계는 deleted_at IS NULL 조건을 적용한다.",
     notes:
       "document(jsonb): title · type(설명회·학원행사·전단배부·특수마케팅·기타) · date(진행일) · period('YYYY-MM') · state(review 확인 필요 · planned 예정 · held 진행 확인 · cancelled 취소) · ownerId(담당 직원 users.id) · objective(acquisition 신규 모집 · retention 재원 관계·유지 · cross_subject 영수 동시수강 확대 · brand 인지도) · reservations·attendees(예약·참석 인원 — null=정확한 수를 모름, 원문은 reservationRaw·attendanceRaw) · budget·actualCost(원 · actualCost가 있으면 costReference=지급·배부 근거) · enrollmentGoal(등록 목표) · executions[](채널별 집행 — channel 전단·현수막·문자·블로그·SNS 등 · ownerId 담당 직원 · plannedQuantity·actualQuantity · budget·actualCost) · work[](준비 업무 — ownerId 담당 직원 · state todo·doing·done) · referenceEventId(참고한 지난 행사) · raw(가져온 원본 값). 진행된 행사 = document->>'state' = 'held'. 🔴 총비용(화면 계산과 같게): 채널별 집행(executions)이 **하나라도 있으면** 행사 actualCost는 쓰지 않고 채널 actualCost의 합 — 단 모든 채널에 actualCost가 있을 때만 합을 내고, 하나라도 비어 있으면 '비용 모름'(부분 합을 총비용으로 답하지 않는다). 채널이 없으면 행사 actualCost(없으면 모름). version = 고친 횟수. 변경 이력은 marketing_archive_audit.",
-    columns: { source_key: "가져온 원본 열쇠(직접 만든 행사는 비어 있다)", document: "행사 내용(jsonb)", version: "버전", updated_by: "마지막으로 고친 직원" },
+    columns: { source_key: "가져온 원본 열쇠(직접 만든 행사는 비어 있다)", document: "행사 내용(jsonb)", version: "버전", updated_by: "마지막으로 고친 직원", deleted_at: "삭제 시각. 일반 조회·집계는 NULL인 행만 사용" },
   },
   {
     name: "marketing_archive_students",
     label: "행사 참여 학생",
-    ko: "홍보 행사에 초대·예약·참석·상담한 원생 기록(행사 × 원생 × 종류 × 날짜마다 한 줄)",
+    ko: "홍보 행사에 초대·예약·참석·상담한 원생 기록(행사 × 원생 × 종류 × 날짜마다 한 줄).",
     notes:
-      "event_id → marketing_archive_events · student_id → students. document->>'kind': invited 초대 · reserved 참석 예약 · attended 참석 · no_show 불참 · test_reserved 입학테스트 예약 · consulted 상담 완료 · date(그 일이 있던 날) · reference(근거) · result · nextAction. 행사가 등록으로 이어졌는지는 참석(attended)·상담 완료(consulted) 기록과 그 원생의 등록일을 함께 봐야 한다(기록만으로 등록을 단정하지 않는다).",
+      "event_id → marketing_archive_events · student_id → students. 행사 성과 집계는 marketing_archive_events.deleted_at IS NULL인 행사만 포함한다. document->>'kind': invited 초대 · reserved 참석 예약 · attended 참석 · no_show 불참 · test_reserved 입학테스트 예약 · consulted 상담 완료 · date(그 일이 있던 날) · reference(근거) · result · nextAction. 행사가 등록으로 이어졌는지는 참석(attended)·상담 완료(consulted) 기록과 그 원생의 등록일을 함께 봐야 한다(기록만으로 등록을 단정하지 않는다).",
     columns: { document: "참여 내용(jsonb · kind로 종류 구분)", version: "버전", updated_by: "마지막으로 고친 직원" },
   },
   {
@@ -206,6 +206,27 @@ export const TABLES_EXTRA: readonly AssistantTableDoc[] = [
     ko: "밖에서 가져온 홍보·마케팅 원본 자료(글·문서) — 행사에 잇기 전에 검토한다",
     notes: "document(jsonb): provider(가져온 곳) · title · url · date · dateKind · type · status. review_status: review 확인 필요 · reference 참고 자료 · excluded 실적 제외 · linked 행사 연결. review_note = 검토 메모. 행사와의 연결은 marketing_archive_sources.",
     columns: { source_key: "원본 열쇠(같은 원본은 한 번만 들어온다)", review_status: "검토 상태", ingested_at: "가져온 시각" },
+  },
+  {
+    name: "duty_items", label: "업무 장부",
+    ko: "업무 완성도 장부 — 학생 × 업무 종류 × 회차마다 해야 할 일(분모)과 완료(분자) 한 줄",
+    notes:
+      "owner_id = 담당 선생님(users.id) · due_at = 기한(UTC) · done_at = 끝낸 시각. status: open 남음 · done 완료 · void = 센 데서 뺀 줄(void_reason 값: absent 결석 · waived 면제 · merged 합침 · not_due 해당 없음 · rekeyed 옮김) — 단 void_reason='expired'(미처리 확정)는 분모에 남아 미처리로 센다. kind: attendance 출결 · report_write 보고서 작성 · report_send 보고서 발송 · video_check 영상 숙제 확인(이상 일간) · counsel_monthly 학생 상담 · exam_monthly 월말평가(월간) · newcomer_call 신규생 관리(건별). 기한 내 완료율 = 기한 안에 끝낸 것 ÷ 때가 된 업무(일간은 수업이 끝난 뒤 · 월간 · 건별은 기한이 지난 뒤). 생성기는 시간표 · 명단에서 만든다(AI 없음).",
+    columns: { kind: "업무 종류 키", cycle: "회차(날짜 · 달 · 항목)", void_reason: "센 데서 뺀 까닭" },
+  },
+  { name: "duty_daily", label: "업무 일별 맞춤", ko: "업무 장부의 하루 요약 — 날짜 × 담당 × 과목 × 종류별 건수", internal: true },
+  { name: "duty_dirty", label: "업무 맞춤 대기", ko: "저장으로 바뀌어 장부를 다시 맞출 날짜 목록(맞추면 지워진다)", internal: true },
+  { name: "duty_settings", label: "업무 장부 설정", ko: "지점별 업무 장부 설정 — 평가 시작일 · 볼 수 있는 첫 날 · 늦음 할 일 스위치 · 맞춤 잠금", internal: true },
+  {
+    name: "duty_notes", label: "업무 관리 이력",
+    ko: "업무 완성도 관리 이력 — 관리자가 남긴 확인 · 사유 · 면제",
+    notes: "duty_id → duty_items · actor_id = 남긴 직원. action: ack 확인 · reason 사유 · waive 면제. 면제만 숫자를 바꾼다(그 줄이 센 데서 빠진다). 확인 · 사유는 기록만.",
+  },
+  {
+    name: "withdrawal_write_turns", label: "퇴원보고서 차례",
+    ko: "퇴원보고서 작성 차례 — 작성 요청이 열릴 때마다 한 줄(보완 요청으로 다시 열리면 다음 차례)",
+    notes: "report_id → withdrawal_reports · assignee_id = 작성할 선생님 · task_id → staff_tasks. status: open 진행 중 · done 작성 · cancelled 취소 · expired 만료. 기한 내 = status='done' and closed_at ≤ due_at(기한이 지난 차례만 판정). 세는 것은 open · done뿐 — cancelled · expired · legacy=true(도입 전 옮긴 기록)는 세지 않는다. 업무 완성도의 참고 열(등급에 안 든다).",
+    columns: { turn_no: "차례 번호(1부터)", close_reason: "닫힌 까닭" },
   },
   { name: "marketing_archive_sources", label: "행사 원본 연결", ko: "홍보 행사와 원본 자료의 연결(행사 하나에 원본 여럿)", notes: "event_id → marketing_archive_events.id · source_id → marketing_source_inbox.id.", internal: true },
   { name: "marketing_archive_audit", label: "홍보 기록 이력", ko: "홍보 행사·참여 학생·원본 검토를 저장할 때마다 남는 변경 기록", notes: "kind: event=행사 · student=참여 학생 · source=원본 검토 · entity_id = 그 기록의 id · actor_id = 저장한 직원 · document = 그 시점 사본 · version. 지금 값은 각 표를 본다.", internal: true },

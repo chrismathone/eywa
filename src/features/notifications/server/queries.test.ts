@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   rows: [] as Row[],
   viewAs: null as null | { id: string; tenantId: string; access: "full" | "readonly" },
   clients: [] as string[],
+  disabledModules: [] as string[],
 }));
 vi.mock("@/lib/auth/current-user", () => ({
   getCurrentUser: async () => ({ id: "me", tenantId: "t1" }),
@@ -24,6 +25,12 @@ vi.mock("@/lib/auth/current-user", () => ({
 // '다른 강사 뷰' — 받은함이 대상 강사 것이 되는지(inbox.ts).
 vi.mock("@/lib/auth/view-as", () => ({ viewAsTeacher: async () => mocks.viewAs }));
 vi.mock("@/lib/auth/tenant-view", () => ({ isTenantViewWriteBlocked: async () => false }));
+vi.mock("@/features/owner/server/queries", () => ({
+  getTenantSettings: async () => ({
+    modules: { disabled: mocks.disabledModules },
+    report: { classnoteSendEnabled: true },
+  }),
+}));
 const fakeDb = (kind: string) => {
   mocks.clients.push(kind);
   return {
@@ -44,10 +51,16 @@ const fakeDb = (kind: string) => {
           filters.push((row) => row[key] === value);
           return query;
         },
-        // `col.op.value,col.op.value` — 하나라도 맞으면(eq · neq만).
+        // `col.op.value,col.op.value` — 하나라도 맞으면.
         or: (expr: string) => {
-          const parts = expr.split(",").map((p) => { const [k, op, ...v] = p.split("."); return { k: k as keyof Row, op, v: v.join(".") }; });
-          filters.push((row) => parts.some(({ k, op, v }) => (op === "eq" ? String(row[k]) === v : String(row[k]) !== v)));
+          const parts = expr.split(",").map((p) => { const [k, op, ...v] = p.split("."); return { k: k as keyof Row, op, v }; });
+          filters.push((row) => parts.some(({ k, op, v }) => {
+            if (op === "eq") return String(row[k]) === v.join(".");
+            if (op === "neq") return String(row[k]) !== v.join(".");
+            if (op === "is" && v[0] === "null") return row[k] === null;
+            if (op === "not" && v[0] === "ilike") return !String(row[k] ?? "").includes(v.slice(1).join(".").replace(/^%|%$/g, ""));
+            return false;
+          }));
           return query;
         },
         maybeSingle: () => ({
@@ -58,8 +71,13 @@ const fakeDb = (kind: string) => {
           filters.push((row) => row[key] === value);
           return query;
         },
-        not: (key: keyof Row, _: string, value: null) => {
-          filters.push((row) => row[key] !== value);
+        not: (key: keyof Row, op: string, value: null | string) => {
+          if (op === "in" && typeof value === "string") {
+            const values = value.replace(/^\(|\)$/g, "").split(",");
+            filters.push((row) => !values.includes(String(row[key])));
+          } else {
+            filters.push((row) => row[key] !== value);
+          }
           return query;
         },
         order: () => query,
@@ -101,6 +119,7 @@ beforeEach(() => {
   mocks.rows = [];
   mocks.viewAs = null;
   mocks.clients = [];
+  mocks.disabledModules = [];
 });
 describe("notification list and badge", () => {
   it("옛 브리핑 20건이 최신이어도 필요한 알림을 밀어내거나 배지를 남기지 않는다", async () => {
@@ -159,6 +178,28 @@ describe("notification list and badge", () => {
     expect(clampNotificationLimit(999)).toBe(100);
     expect(clampNotificationLimit("x")).toBe(20);
     expect(clampNotificationLimit(33.7)).toBe(33);
+  });
+  it("꺼진 기능에서 이미 쌓인 알림은 목록과 배지에서 함께 빠진다", async () => {
+    mocks.disabledModules = ["approvals", "classnote"];
+    mocks.rows = [
+      row("approval", "approval_requested"),
+      row("parent", "classnote_parent_post"),
+      row("old-digest", "staff_task_digest", { body: "전자결재 차례 2 · 상담 후속조치 1" }),
+      row("other", "followup_due"),
+    ];
+    const result = await getMyNotifications();
+    expect(result.items.map((item) => item.id)).toEqual(["other"]);
+    expect(result.unread).toBe(1);
+  });
+  it("보관함에서도 꺼진 기능 이름이 남은 옛 업무 요약은 빠진다", async () => {
+    mocks.disabledModules = ["approvals"];
+    mocks.rows = [
+      row("hidden-digest", "staff_task_digest", { archived_at: "2026-11-10", body: "전자결재 차례 2 · 상담 후속조치 1" }),
+      row("visible-digest", "staff_task_digest", { archived_at: "2026-11-09", body: "상담 후속조치 1" }),
+      row("other", "followup_due", { archived_at: "2026-11-08", body: "전자결재 차례를 별도 문장으로 설명" }),
+    ];
+    const result = await getMyNotifications("archived");
+    expect(result.items.map((item) => item.id)).toEqual(["visible-digest", "other"]);
   });
 });
 

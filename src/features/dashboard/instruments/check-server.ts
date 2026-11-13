@@ -8,6 +8,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supabase/batch";
 import { createClient } from "@/lib/supabase/server";
 import { countOpenTasks } from "@/features/staff-tasks/server/queries";
+import { hiddenStaffTaskKinds } from "@/features/staff-tasks/task-visibility";
+import { getTenantSettings } from "@/features/owner/server/queries";
 import type { AbsenceLine, LateTask, TaskBoard } from "./extras-types";
 
 const PERSON_TASKS = 60;
@@ -60,15 +62,19 @@ export async function loadAbsenceLines(tenantId: string): Promise<AbsenceLine[]>
  * 사람에게만 · 지점 보기 중에는 없다(`getStaffTaskViewer`). 목록·상세는 2.0 할 일 라우트를 그대로 읽는다(새로 판정하지 않는다).
  */
 export async function loadTaskBoard(): Promise<TaskBoard | null> {
-  const viewer = await getStaffTaskViewer();
+  const [viewer, settings] = await Promise.all([getStaffTaskViewer(), getTenantSettings()]);
   if (!viewer?.canMonitor) return null;
   const admin = createAdminClient();
   const tenantId = viewer.user.tenantId;
   const now = Date.now();
+  const hidden = hiddenStaffTaskKinds(settings);
   const [rows, byUser] = await Promise.all([
-    fetchAllPaged<{ id: string; kind: string; due_at: string | null; title: string; link: string | null }>((from, to) =>
-      admin.from("staff_tasks").select("id, kind, due_at, title, link").eq("tenant_id", tenantId).eq("status", "open").order("id").range(from, to)),
-    countOpenTasks(tenantId),
+    fetchAllPaged<{ id: string; kind: string; due_at: string | null; title: string; link: string | null }>((from, to) => {
+      let query = admin.from("staff_tasks").select("id, kind, due_at, title, link").eq("tenant_id", tenantId).eq("status", "open");
+      if (hidden.length) query = query.not("kind", "in", `(${hidden.join(",")})`);
+      return query.order("id").range(from, to);
+    }),
+    countOpenTasks(tenantId, undefined, hidden),
   ]);
   const kinds = new Map<string, { kind: string; open: number; late: number }>();
   for (const row of rows) {

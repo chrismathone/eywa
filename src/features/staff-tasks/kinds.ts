@@ -59,6 +59,15 @@ export const TASK_KINDS: Record<string, StaffTaskKindInfo> = {
     label: "환불 처리",
     doneRule: "퇴원보고서에서 원장이 환불을 승인하며 나를 데스크 담당자로 지정한 일입니다. 환불 요청서에 환불완료일자를 넣고 저장하면 처리됩니다. 요청서를 지우면 취소됩니다. 다음 날까지 처리하지 않으면 늦음입니다.",
   },
+  duty_late: {
+    label: "업무 미처리",
+    // 원장 2026-11-10 *"쓸데없는 멘트 제거"* — 한 줄만(가드: 모든 종류는 처리 기준을 가진다).
+    doneRule: "그 기록이 생기면 처리됩니다.",
+  },
+  duty_late_up: {
+    label: "업무 미처리 관리",
+    doneRule: "그 미처리 업무가 처리 · 면제되거나 '미처리 확정'이 되면 닫힙니다.",
+  },
   help_question: {
     label: "도움말 질문",
     doneRule: "질문에 답변이 달리거나 답변 완료·닫힘이 되면 처리됩니다. 질문이 지워지면 취소됩니다. 다음 날까지 답하지 않으면 늦음입니다.",
@@ -125,6 +134,11 @@ const CLOSE_REASON: Record<string, string> = {
   refund_settled: "원장 환불 결정이 끝남(또는 결정할 청구가 없어짐)",
   turn_changed: "차례가 바뀜",
   help_answered: "답변이 달림",
+  duties_resolved: "업무가 처리됨",
+  duties_cleared: "미처리가 정리됨(처리 · 면제 · 미처리 확정)",
+  duties_expired: "미처리로 확정됨",
+  duties_moved_or_void: "담당이 바뀌거나 해당 없음",
+  late_tasks_off: "업무 알림이 꺼짐",
 };
 export function closeReasonLabel(reason: string | null): string | null {
   return reason ? (CLOSE_REASON[reason] ?? null) : null;
@@ -132,7 +146,7 @@ export function closeReasonLabel(reason: string | null): string | null {
 
 /** 이력 한 줄의 사건 이름. */
 const EVENT_LABEL: Record<string, string> = {
-  opened: "할 일 생김",
+  opened: "업무요청",
   reopened: "다시 열림",
   assigned: "담당 지정",
   retry_requested: "재발송 요청",

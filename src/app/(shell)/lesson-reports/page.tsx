@@ -1,4 +1,5 @@
 import { requireAccess } from "@/lib/auth/require-access";
+import { redirectStatsFirst } from "@/lib/auth/stats-first";
 import { canAccessTenant, canWriteTenant } from "@/lib/auth/perm-matrix";
 import { PageHeader } from "@/components/page-header";
 import { FaceTabs } from "@/components/face-tabs";
@@ -60,6 +61,8 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
     canAccessTenant(viewer.systemRole, "lesson_reports"),
   ]);
   if (sp.tab === "video_homework") redirect("/lesson-reports/video-homework");
+  // 원장·관리자가 메뉴로 열면 통계가 먼저(stats-first.ts) — 필터·탭이 실린 주소와 '목록으로'(list=1)는 그대로 목록.
+  if (canReports) await redirectStatsFirst(viewer.systemRole, sp, "/lesson-reports");
   // ClassNote 모듈 — 꺼진 학원은 발송 콘솔(큐·반 구성·반 공지·직접 발송·회수)을 세우지 않는다. 침산은 켜져 있어 종전과 같다.
   // 요청 캐시라 아래 면별 조회의 getTenantSettings와 같은 조회를 나눠 쓴다.
   const [tenantSettings, aiOn] = await Promise.all([getTenantSettings(), isFeatureLicensed(viewer.tenantId, "ai_analysis")]);
@@ -135,6 +138,7 @@ export default async function LessonReportsPage({ searchParams }: { searchParams
                   total: firstPage.total ?? 0,
                   page: firstPage.page ?? 0,
                   pageSize: firstPage.pageSize ?? 30,
+                  showRating: firstPage.showRating ?? false,
                 },
               }));
 

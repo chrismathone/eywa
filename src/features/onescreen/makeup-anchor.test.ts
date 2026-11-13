@@ -75,10 +75,10 @@ describe("makeupInvariantViolations — 🔴 보강 보고서 반 = 보강 출�
       "no_cell_in_anchor",
       "cell_outside_anchor",
     ]));
-  it("적힌 '보낼 반'이 앵커와 다르면 위반", () =>
-    expect(makeupInvariantViolations({ report: r({ classnoteClassId: "X" }), cells: [{ classId: "B", status: "present" }], requireAnchor: true })).toEqual([
-      "send_class_differs",
-    ]));
+  it("보고서 전달 반이 달라도 보강 출결 반은 보존한다", () => {
+    expect(makeupInvariantViolations({ report: r({ classnoteClassId: "X" }), cells: [{ classId: "B", status: "present" }], requireAnchor: true })).toEqual([]);
+    expect(makeupSendClassOf(r({ classnoteClassId: "X" }))).toBe("X");
+  });
 });
 
 const row = (id: string, classId: string, status: string, recordedAt = "2026-09-30T10:00:00Z", slotStart: string | null = null): MoveCellRow => ({

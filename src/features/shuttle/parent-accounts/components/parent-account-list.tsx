@@ -1,4 +1,5 @@
 import { TONE_SOFT } from "@/lib/design/semantic-color";
+import { phoneLabel } from "@/lib/format/phone";
 import type { ParentAccount } from "../server/parents";
 import { ParentAccountDelete } from "./parent-account-delete";
 
@@ -24,7 +25,7 @@ export function ParentAccountList({ accounts, readOnly = false }: { accounts: re
             <div className="min-w-0">
               <h3 className="font-bold">{account.displayName}</h3>
               <p className="text-text-dim text-sm break-all">
-                {account.email} · {account.phone || "연락처 미등록"}
+                {account.email} · {phoneLabel(account.phone) ?? "연락처 미등록"}
               </p>
             </div>
             <span
@@ -40,7 +41,7 @@ export function ParentAccountList({ accounts, readOnly = false }: { accounts: re
                   {student.name} · {student.schoolGrade}
                 </span>
                 <span className="text-text-dim">
-                  {student.relationship} · {student.parentPhone || "원생 연락처 미등록"}
+                  {student.relationship} · {phoneLabel(student.parentPhone) ?? "원생 연락처 미등록"}
                 </span>
               </div>
             ))}

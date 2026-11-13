@@ -40,6 +40,7 @@ import { ConnectedAppRail } from "@/components/connected-app-rail";
 import { recordMenuVisit } from "@/features/nav/server/visit-actions";
 import { useMenuHub } from "./workspace/menu-hub-store";
 import { ROLE_LABEL } from "@/lib/auth/role-hierarchy";
+import { groupStatsEntry } from "@/lib/auth/stats-first-rule";
 import { TeacherViewSwitcher } from "@/components/other-teacher-view";
 import { useIsDesktop } from "@/components/workspace/use-is-desktop";
 import { useWindowMode } from "@/components/workspace/use-window-mode";
@@ -49,7 +50,7 @@ import { useSidebarWidth } from "@/components/workspace/use-sidebar-resize";
 import { useWindowStore, windowId } from "@/components/workspace/window-store";
 import { useShowDesktop } from "@/components/workspace/use-show-desktop";
 import { useShellHome } from "@/components/workspace/shell-home";
-import { openMenuWindow } from "@/components/workspace/open-menu-window";
+import { openLinkWindow, openMenuWindow } from "@/components/workspace/open-menu-window";
 import {
   cancelScheduledPrefetch,
   scheduleEmbedPrefetch,
@@ -95,8 +96,9 @@ function isItemActive(href: string, pathname: string) {
 function openWindowAtPoint(item: NavItem, clientX: number, clientY: number) {
   if (navPresentation(item) !== "window") return;
   const st = useWindowStore.getState();
-  st.open("route", { id: item.menuKey, title: hubDestinationForPath(item.href)?.label ?? item.label, href: item.href });
-  const winId = windowId("route", item.menuKey);
+  const id = windowIdForHref(item.href)?.id ?? item.menuKey;
+  if (!st.open("route", { id, title: hubDestinationForPath(item.href)?.label ?? item.label, href: item.href })) return;
+  const winId = windowId("route", id);
   const s2 = useWindowStore.getState();
   const win = s2.windows[winId];
   if (!win) return;
@@ -435,6 +437,7 @@ export function AppSidebar({
               <GroupRail
                 key={g.id}
                 group={g}
+                systemRole={systemRole}
                 allGroups={allGroups}
                 isDesktop={windows}
                 expanded={expanded}
@@ -466,6 +469,7 @@ export function AppSidebar({
                 <GroupRail
                   key={g.id}
                   group={g}
+                  systemRole={systemRole}
                 allGroups={allGroups}
                   isDesktop={windows}
                   expanded={expanded}
@@ -695,6 +699,8 @@ function MenuRail({
   focusedPath,
   hasFocus,
   hubOpen = false,
+  groupActive,
+  fixedEntry = false,
 }: {
   item: NavItem;
   isDesktop: boolean;
@@ -707,6 +713,8 @@ function MenuRail({
   focusedPath: string | null;
   hasFocus: boolean;
   hubOpen?: boolean;
+  groupActive?: boolean;
+  fixedEntry?: boolean;
 }) {
   const st = railState(item, { isDesktop, pathname, focusedPath, hasFocus, hubOpen });
   return (
@@ -719,11 +727,12 @@ function MenuRail({
     >
       <RailItem
         item={item}
-        active={st.active}
+        active={groupActive ?? st.active}
         isDesktop={isDesktop}
         expanded={expanded}
         motion={motion}
         onShowDesktop={onShowDesktop}
+        fixedEntry={fixedEntry}
       />
     </div>
   );
@@ -735,6 +744,7 @@ function MenuRail({
  */
 function GroupRail({
   group,
+  systemRole,
   allGroups,
   isDesktop,
   expanded,
@@ -748,6 +758,7 @@ function GroupRail({
   hasFocus,
 }: {
   group: HubGroup;
+  systemRole: SystemRole;
   allGroups: HubGroup[];
   isDesktop: boolean;
   expanded: boolean;
@@ -763,6 +774,7 @@ function GroupRail({
 }) {
   const search = useSearchParams();
   const currentHref = `${pathname}?${search.toString()}`;
+  const statsEntry = groupStatsEntry(group, systemRole);
   const lead = group.kind === "direct" ? group.items[0] : undefined;
   const base = lead ? navItemByKey(lead.menuKey) : undefined;
   // 시안: 권한만 빌린 줄(예: 대시보드 권한의 화면)은 그 메뉴의 '바탕 화면' 표시 방식을 물려받지 않는다 — 물려받으면 눌러도 대시보드만 보인다.
@@ -798,6 +810,35 @@ function GroupRail({
     ? hasFocus && hubOpenId === null && !!focusedPath && hubGroupOfPath(focusedPath, allGroups)?.id === group.id
     : hubOpenId === null && hubGroupOfPath(currentHref, allGroups)?.id === group.id;
   const active = hubOpen || focusedHere;
+  if (statsEntry) {
+    return (
+      <div className="relative">
+        <MenuRail
+          item={{ ...statsEntry, label: group.label, icon: group.icon }}
+          isDesktop={isDesktop}
+          expanded={expanded}
+          motion={motion}
+          onShowDesktop={onShowDesktop}
+          onOpen={onCloseHub}
+          pathname={pathname}
+          focusedPath={focusedPath}
+          hasFocus={hasFocus}
+          groupActive={active}
+          fixedEntry
+        />
+        <button
+          type="button"
+          onClick={() => onToggleHub(group.id)}
+          aria-expanded={hubOpen}
+          aria-label={`${group.label} 메뉴`}
+          title={`${group.label} 메뉴`}
+          className={`absolute inset-y-0 right-1 flex items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-inset ${expanded ? "w-8" : "w-4"} ${active ? "text-primary-foreground hover:bg-primary-foreground/15" : "text-text-dim hover:bg-bg-soft"}`}
+        >
+          <EyIcon name="chevronDown" size={expanded ? 16 : 12} />
+        </button>
+      </div>
+    );
+  }
   // 🔴 **열려 있는 창을 표시하지 않는다**(원장 2026-09-09 *"열려있는 창 모두 표시하지말고 현재 보고 있는
   //    창만 탭에서 표시"*) — 창을 여럿 띄우면 줄이 여럿 칠해져 "지금 어디를 보고 있나"가 안 읽혔다.
   //    표시는 **포커스 하나**뿐이다. 점·연한 채움을 되살리지 말 것(`openIds`는 포커스 판정에만 쓴다).
@@ -842,6 +883,7 @@ function RailItem({
   expanded,
   motion,
   onShowDesktop,
+  fixedEntry = false,
 }: {
   item: NavItem;
   /** 🔴 **지금 보고 있는 창 하나**만 참이다 — 열려 있는 다른 창은 표시하지 않는다(원장 2026-09-09). */
@@ -850,6 +892,8 @@ function RailItem({
   expanded: boolean;
   motion: boolean;
   onShowDesktop: () => void;
+  /** 큰 탭의 통계는 이미 열려 있는 창에서도 지정한 화면으로 들어간다. */
+  fixedEntry?: boolean;
 }) {
   const start = useRef<{ x: number; y: number } | null>(null);
   const dragged = useRef(false);
@@ -871,6 +915,10 @@ function RailItem({
     // shift+클릭 = 같은 메뉴를 새 창으로 한 벌 더(듀얼).
     if (e.shiftKey) {
       useWindowStore.getState().openNewInstance("route", params);
+      return;
+    }
+    if (fixedEntry) {
+      openLinkWindow(params);
       return;
     }
     // 🔴 포커스/리셋 판정은 **메뉴 판과 같은 함수**를 쓴다 — 갈리면 같은 메뉴가 사이드바에서 누를 때와
@@ -934,7 +982,7 @@ function RailItem({
         className={`relative z-10 shrink-0 ${fg} ${motion ? "transition-colors duration-200" : ""}`}
       />
       <span
-        className={`relative z-10 overflow-hidden text-sm font-medium whitespace-nowrap ${fg} ${
+        className={`relative z-10 overflow-hidden text-sm font-medium whitespace-nowrap ${fixedEntry && expanded ? "mr-8 truncate" : ""} ${fg} ${
           expanded ? "max-w-[160px] opacity-100" : "max-w-0 opacity-0"
         } ${motion ? `transition-[max-width,opacity,color] duration-200 ${EASE}` : ""}`}
       >

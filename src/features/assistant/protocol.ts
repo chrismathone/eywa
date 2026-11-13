@@ -15,7 +15,8 @@ import type { SettledReport } from "./report";
  * `clientRef` — 화면이 보낼 때 만든 번호(uuid). 질문 번호(`started`)를 받기 전에 누른 멈춤·마무리가 그 질문을 찾는다
  * (동시에 여러 질문이 돌 수 있어 '지금 도는 내 질문'으로는 어느 것인지 모른다 · SQL s2_0034).
  */
-export type AskBody = { threadId?: string | null; question: string; clientRef?: string };
+/** redoOf = 다시 묻는 원래 질문 번호. 앞 답을 이력에서 빼되 답변 모델은 항상 Terra low다. */
+export type AskBody = { threadId?: string | null; question: string; clientRef?: string; redoOf?: string | null };
 
 /**
  * 한 사람이 동시에 만들 수 있는 답 — 원장 2026-11-06 '동시에 3개까지'(조회 한도를 없애 답 하나가 최대 13분쯤 걸린다).

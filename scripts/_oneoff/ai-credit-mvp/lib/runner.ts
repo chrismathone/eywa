@@ -2,7 +2,7 @@
 // ⚠️ 이 폴더 스크립트는 .ts(CJS)로 둔다 — .mts(ESM)에서 부르면 앱 모듈(dev-cli)이 두 벌 실려 관찰자 기록이 끊긴다(2026-10-26 실측).
 // 모든 호출은 generateJSON()을 그대로 지난다(사실 원칙 FACT_GUARD · 지점 식별 · 모델 지정 · 개발 CLI 갈래).
 //  · mode "cli"(기본) = 내부 요금제(구독 CLI) — AI_DEV_CLAUDE_CLI=1. 횟수 제한 없음(원장 10-26).
-//  · mode "api" = 실제 API — 상한 $5(장부 합계로 막는다). Anthropic 키만 싣는다(DeepSeek 키가 없어 폴백이 일어날 수 없다).
+//  · mode "api" = 실제 API — 상한 $5(장부 합계로 막는다). Anthropic 키만 싣고 OpenAI 키는 금지해 폴백 과금을 막는다.
 // 🔴 운영 DB·Supabase 환경변수가 있으면 시작하지 않는다(있으면 generateJSON이 운영 ai_usage_logs에 쓴다).
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
@@ -19,7 +19,7 @@ export const MODELS = { haiku: "claude-haiku-5-5", sonnet: "claude-sonnet-5-5" }
 const PRICE: Record<string, { in: number; out: number }> = { [MODELS.haiku]: { in: 0.1, out: 0.5 }, [MODELS.sonnet]: { in: 2, out: 10 } };
 
 export type Mode = "cli" | "api";
-const FORBIDDEN_ENV = /^(DATABASE_URL|SUPABASE_|NEXT_PUBLIC_SUPABASE_|DEEPSEEK_API_KEY)/;
+const FORBIDDEN_ENV = /^(DATABASE_URL|SUPABASE_|NEXT_PUBLIC_SUPABASE_|DEEPSEEK_API_KEY|OPENAI_API_KEY)/;
 
 export function assertEvalEnv(mode: Mode): void {
   const bad = Object.keys(process.env).filter((k) => FORBIDDEN_ENV.test(k));

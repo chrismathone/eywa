@@ -50,11 +50,11 @@ export async function ParentMonthView({
   const lastMonth = addDays(today, MAX_AHEAD_DAYS).slice(0, 7);
   const asked = /^\d{4}-\d{2}$/.test(rawMonth ?? "") ? rawMonth! : thisMonth;
 
-  const data = await loadParentMonth(viewer.tenantId, kid.id, asked);
+  const data = await loadParentMonth(viewer, kid.id, asked);
   const firstMonth = data.earliestMonth && data.earliestMonth < thisMonth ? data.earliestMonth : thisMonth;
   // 범위 밖 주소는 끝으로 당긴다(달은 데이터를 다시 안 읽어도 될 만큼 가벼운 판정만 — 재료는 asked로 읽었다).
   const month = asked < firstMonth ? firstMonth : asked > lastMonth ? lastMonth : asked;
-  const monthData = month === asked ? data : await loadParentMonth(viewer.tenantId, kid.id, month);
+  const monthData = month === asked ? data : await loadParentMonth(viewer, kid.id, month);
 
   const input = { month, today, ...monthData };
   const weeks = buildParentMonth(input);
@@ -65,7 +65,7 @@ export async function ParentMonthView({
   const inMonth = new Map(weeks.flat().filter((d) => d.inMonth).map((d) => [d.date, d]));
   // 수업 있는 날(= 등원하는 날)과 그날 수업(과목 · 시각) — 쉬는 날은 뺀다. 실패하면 표시 없이 달력만 그린다.
   const classDates = await loadParentClassDates(
-    viewer.tenantId,
+    viewer,
     kid.id,
     [...inMonth.values()].filter((d) => !d.holiday).map((d) => ({ day: dayCodeOf(d.date), ymd: d.date })),
   );

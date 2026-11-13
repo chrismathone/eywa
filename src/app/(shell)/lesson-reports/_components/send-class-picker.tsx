@@ -21,6 +21,7 @@ export type SendClassOption = {
   requestable?: boolean;
   /** 보강 추가한 반으로 간다(needed=false, reportClassName = 그 반). */
   viaMakeup?: boolean;
+  deliveryOnly?: boolean;
   /** 보강 추가한 반인데 반 보드가 없어 다른 반으로 가야 한다 — 그 반 이름. */
   makeupClassName?: string | null;
 };
@@ -52,7 +53,8 @@ export function SendClassPicker({
   // 보강 추가한 반과 다른 반으로 간다(그 반에 이 학생의 반 보드가 없다) — 원장 2026-09-30.
   const mismatch = option.makeupClassName ? (
     <p role="alert" className="bg-amber-soft text-foreground mb-1 rounded-md px-3 py-2 text-xs font-bold">
-      보강 반({option.makeupClassName})에 이 학생의 ClassNote 반 보드가 없습니다 — 보강 반을 바꿔 주세요(고른 반으로 출석부 보강 칸도 옮겨집니다).
+      보강 반({option.makeupClassName})으로는 이 학생의 보고서를 보낼 수 없습니다. 반 설정과 학생의 ClassNote 반 보드 연결을 확인해 주세요.{" "}
+      {option.deliveryOnly ? "고른 반으로 보고서만 전달하며 보강 반과 출결·시수 기록은 유지됩니다." : "고른 반으로 출석부 보강 칸도 옮겨집니다."}
     </p>
   ) : null;
   if (!option.candidates.length) {
@@ -76,7 +78,7 @@ export function SendClassPicker({
   return (
     <div className="max-w-sm">
       {mismatch}
-      <div className={LABEL}>보강 반(ClassNote 반 보드)</div>
+      <div className={LABEL}>{option.deliveryOnly ? "보고서를 보낼 반" : "보강 반"}(ClassNote 반 보드)</div>
       <select value={value} onChange={(e) => onChange(e.target.value)} className={INPUT} aria-label="보강 반">
         {value ? null : <option value="">반을 고르세요</option>}
         {option.candidates.map((c) => (
@@ -86,7 +88,7 @@ export function SendClassPicker({
           </option>
         ))}
       </select>
-      <p className="text-text-faint mt-0.5 text-xs">반 없는 보강입니다 — 고른 반으로 보고서가 발송되고 출석부 보강 칸도 그 반에 섭니다.</p>
+      <p className="text-text-faint mt-0.5 text-xs">{option.deliveryOnly ? "고른 반은 보고서를 전달할 경로입니다. 보강 반과 출결·시수는 바뀌지 않습니다." : "반 없는 보강입니다 — 고른 반으로 보고서가 발송되고 출석부 보강 칸도 그 반에 섭니다."}</p>
     </div>
   );
 }

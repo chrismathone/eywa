@@ -70,6 +70,7 @@ const V = {
   edge: "var(--net-edge)",
   edgeHi: "var(--net-edge-hi)",
   edgeCross: "var(--net-edge-cross)",
+  bundle: "var(--net-edge-bundle)",
   node: "var(--net-node)",
   near: "var(--net-node-near)",
   chosen: "var(--net-chosen)",
@@ -80,6 +81,20 @@ const V = {
 };
 const tone = (n: NetNode) => `var(--net-t-${n.tone})`;
 const tree = (id: string) => id.startsWith("hub:") || id.startsWith("grp:");
+/** '묶기' 선을 진하게 할 점 — 가리킨 점과, 기록이면 그 기록이 든 묶음들(묶음 밖 기록은 그 영역). 묶은 선이 없으면 null. */
+const idCache = new WeakMap<NetNode[], Map<string, NetNode>>(); // 판(점 배열) 하나에 한 번
+function bundleLit(nodes: NetNode[], edges: NetBoard["edges"], active: string): Set<string> | null {
+  if (!edges.some((e) => e.bundle)) return null;
+  let byId = idCache.get(nodes);
+  if (!byId) idCache.set(nodes, (byId = new Map(nodes.map((n) => [n.id, n]))));
+  const lit = new Set([active]);
+  const me = byId.get(active);
+  if (!me || me.kind === "hub" || me.kind === "group" || me.kind === "root") return lit;
+  let p = me.parent ? byId.get(me.parent) : undefined;
+  if (p?.kind !== "group") return me.hub ? lit.add(me.hub) : lit;
+  for (; p?.kind === "group"; p = p.parent ? byId.get(p.parent) : undefined) lit.add(p.id);
+  return lit;
+}
 const f1 = (n: number) => n.toFixed(1);
 
 /** 한 프레임을 그린다. 돌려주는 값 = 확대 비율 글('130%'). */
@@ -89,6 +104,8 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
   const { nodes, edges, pos, view, adjacency } = B;
   const active = o.active;
   const neighbors = active ? (adjacency.get(active) ?? null) : null;
+  const lit = active ? bundleLit(nodes, edges, active) : null;
+  const litEnds = new Set<string>(); // 진하게 그린 묶은 선의 두 끝 — 그 점은 흐리지 않는다(영역에 닿는 묶은 선은 이웃 판정에 없다 · layout.ts)
   const sc = (id: string) => ({ x: pos[id].x * view.k + view.x, y: pos[id].y * view.k + view.y });
   const rad = (n: NetNode) => Math.max(2, netRadius(n, B) * (n.rScale ?? 1) * Math.sqrt(view.k));
   for (const e of edges) {
@@ -103,6 +120,24 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
     }
     const hi = !!active && (e.from === active || e.to === active);
     if (e.focusOnly && !hi) continue; // 강조할 때만 그리는 선(그리지 않은 선은 이 프레임 끝에 DOM에서 빠진다)
+    if (e.bundle) {
+      // '묶기' 선 = 묶음 사이 기록 관계 수만큼 굵게 · 가운데 쪽으로 휘어 모인다(곧은 선끼리 판을 가로질러 엉키지 않게).
+      const c = pos[B.centerId] ? sc(B.centerId) : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const qx = (a.x + b.x) / 2 + (c.x - (a.x + b.x) / 2) * 0.45, qy = (a.y + b.y) / 2 + (c.y - (a.y + b.y) / 2) * 0.45;
+      const w = e.w ?? 1;
+      // 강조 = 그 묶음(또는 고른 기록이 든 묶음)의 선 · 나머지 묶은 선은 흐리되 남긴다(켠 것이 보이게).
+      const on = !!lit && (lit.has(e.from) || lit.has(e.to));
+      if (on) litEnds.add(e.from).add(e.to);
+      upsert(L, L.edges, `b:${e.from}|${e.to}`, "path", {
+        d: `M ${f1(a.x)} ${f1(a.y)} Q ${f1(qx)} ${f1(qy)} ${f1(b.x)} ${f1(b.y)}`,
+        fill: "none",
+        stroke: on ? V.edgeHi : V.bundle,
+        "stroke-opacity": ((active ? (on ? 0.8 : 0.12) : 0.22 + Math.min(0.33, Math.log2(w + 1) * 0.06)) * Math.sqrt(ext)).toFixed(3),
+        "stroke-width": ((on ? 1.3 : 1) * Math.min(6, 0.8 + Math.log2(w + 1) * 0.9)).toFixed(2),
+        "stroke-linecap": "round",
+      });
+      continue;
+    }
     // 교차 선(점선) = 영역·날짜 묶음·가운데를 거치지 않는 선(분석 근거 등) — 묶음 아래 기록 선은 자리 선이다.
     const cross = !tree(e.from) && !tree(e.to) && e.from !== B.centerId && e.to !== B.centerId;
     const so = (active ? (hi ? 0.85 : 0.06) : cross ? 0.5 : o.dark ? 0.55 : 0.28) * Math.sqrt(ext);
@@ -119,7 +154,7 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
     const p = sc(n.id);
     const r = rad(n);
     const chosen = n.id === active;
-    const near = !!neighbors?.has(n.id);
+    const near = !!neighbors?.has(n.id) || litEnds.has(n.id);
     const color = tone(n);
     const fill = chosen ? V.chosen : n.kind === "root" ? V.rootFill : o.colored || n.kind === "hub" || n.kind === "analysis" || n.kind === "group" ? color : near ? V.near : V.node;
     const op = ((active && !chosen && !near ? 0.18 : 1) * (n.op ?? 1)).toFixed(3);
@@ -144,7 +179,7 @@ export function drawBoard(svg: SVGSVGElement, B: NetBoard, o: DrawOpts): string 
     at: (id) => (pos[id] ? sc(id) : null),
     radius: rad,
     active,
-    neighbors,
+    neighbors: litEnds.size ? new Set([...(neighbors ?? []), ...litEnds]) : neighbors, // 진한 묶은 선의 끝 이름도 흐리지 않는다
     hubHover: o.hubHover,
     showAll: o.labels,
     k: view.k,

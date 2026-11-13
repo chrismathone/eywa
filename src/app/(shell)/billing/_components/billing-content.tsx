@@ -165,7 +165,7 @@ export async function BillingContent({ sp, canImport = false }: { sp: Sp; canImp
     if (opts.overdue ?? overdueOnly) params.set("overdue", "1");
     if (opts.missing ?? missingOnly) params.set("missing", "1");
     const s = params.toString();
-    return s ? `/billing?${s}` : "/billing";
+    return s ? `/billing?${s}` : "/billing?list=1";
   };
   const pageHref = (p: number) => {
     const params = new URLSearchParams();
@@ -177,7 +177,7 @@ export async function BillingContent({ sp, canImport = false }: { sp: Sp; canImp
     if (missingOnly) params.set("missing", "1");
     if (p > 1) params.set("page", String(p));
     const s = params.toString();
-    return s ? `/billing?${s}` : "/billing";
+    return s ? `/billing?${s}` : "/billing?list=1";
   };
 
   // 헤더 서브 라인(풀·컴팩트 공용) — 검색·페이지 상태까지 포함(헤더가 총 필터 결과 수의 유일한 표시처).

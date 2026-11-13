@@ -9,7 +9,7 @@ export function MyTasksStripButton({ open, late, lang, className = "" }: { open:
   const [shown, setShown] = useState(false);
   const label = lang === "en"
     ? `My tasks ${open}${late ? ` · ${late} overdue` : ""}`
-    : `내 할 일 ${open.toLocaleString("ko-KR")}건${late ? ` · 기한 초과 ${late.toLocaleString("ko-KR")}` : ""}`;
+    : `내 업무 ${open.toLocaleString("ko-KR")}건${late ? ` · 기한 초과 ${late.toLocaleString("ko-KR")}` : ""}`;
   return <>
     <button type="button" onClick={() => setShown(true)}
       className={`border-line hover:bg-bg-soft flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold ${late ? "text-danger" : "text-foreground"} ${className}`}>

@@ -17,6 +17,7 @@ import { BillingMonthNav } from "./billing-month-nav";
 import { FaceNote } from "./face-note";
 import { TERM_STATE_LABEL } from "@/features/billing/session-terms/month-roster";
 import { tipProps } from "@/components/hover-tip/tip";
+import { isModuleEnabled } from "@/lib/modules";
 
 const PAGE_SIZE = 50;
 
@@ -67,6 +68,7 @@ export async function SessionVerificationFace({
     getTeacherSplitsStatus(p),
   ]);
   const subjects = buildSubjectMaps(settings.operations.subjects);
+  const eieOn = isModuleEnabled(settings.modules.disabled, "eie");
   // 분배 스냅샷 드리프트 대조용 — 과목 필터와 무관하게 그 달 전체(저장 단위와 동일 기준).
   // 지문은 강사 귀속까지 포함 — 합계가 상쇄되는 변경(강사 재배정)도 드리프트로 잡는다.
   const liveSplitRows = computeSplitRows(view.rows);
@@ -167,7 +169,7 @@ export async function SessionVerificationFace({
       <FaceNote>
         <b>달력월 청구 시수 대조</b>입니다. 출석부 시수 마스터의 세션 기간과 다르며, *LAB 출결도 청구 소비에 포함합니다.{" "}
         <b>확정한 시수</b>(청구 기준)와 그 반의 <b>출석부 시수 합계</b>(출석·지각·조퇴·보강)를 대조합니다. 기존 일수 기준 확정은 재확정 전까지 같은 일수 기준으로 비교합니다.
-        {" "}EiE 월 고정은 확정한 월 금액을 정산 기준으로 쓰며 출석 회차로 금액을 바꾸지 않습니다.
+        {eieOn ? <> {" "}EiE 월 고정은 확정한 월 금액을 정산 기준으로 쓰며 출석 회차로 금액을 바꾸지 않습니다.</> : null}
         차이는 <span className="text-amber">부족</span>(청구보다 적게 나옴)·<span className="text-danger">초과</span>(더
         나옴) 신호일 뿐, 어느 값도 자동으로 맞추지 않습니다. 회차를 고치려면{" "}
         <Link href={`/billing?tab=sessions&period=${p}`} className="text-primary underline-offset-2 hover:underline">

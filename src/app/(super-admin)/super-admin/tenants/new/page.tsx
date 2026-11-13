@@ -12,7 +12,7 @@ export default function NewTenantPage() {
       <PageHeader
         eyebrow="전 지점 운영"
         title="신규 학원 발급"
-        description="학원과 원장 계정을 한 번에 만듭니다. 만든 즉시 그 원장이 로그인할 수 있습니다."
+        description="학원·원장 계정과 처음 사용할 기능을 한 번에 정합니다. 만든 즉시 그 원장이 로그인할 수 있습니다."
         embedLabel="학원과 원장 계정을 한 번에 만듭니다"
         actions={
           <Link href="/super-admin/tenants" className={buttonVariants({ variant: "outline" })}>

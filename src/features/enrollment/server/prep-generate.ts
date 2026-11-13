@@ -62,7 +62,7 @@ export async function runPrepBriefGeneration(
       generateJSON<unknown>({
         // 응답 상한은 generateJSON이 바닥값(Claude 5 계열 64,000)으로 올린다 — 생각 토큰까지 들어가게.
         maxTokens: 8192,
-        provider: "anthropic", // 2026-10-26 원장 "딥시크로 바꾼거 다 클로드로" — Sonnet 5.5(기본 등급)
+        provider: "anthropic", // 2026-10-26 원장 결정 — Sonnet 5.5(기본 등급)
         meta: { feature: "enrollment_prep_brief", tenantId },
         prompt: buildPrepBriefPrompt(facts),
       });
@@ -190,6 +190,6 @@ export async function generatePrepBriefOnIntake(consultationId: string, tenantId
  * 화면은 진행바 + watcher(realtime+폴링)가 완료 시 자동 새로고침. 이전 브리프는 생성 중에도
  * 유지된다(재생성 실패 = 직전 브리프 증발 방지).
  *
- * provider = **Claude Sonnet 5.5**(원장 2026-10-26 *"딥시크로 바꾼거 다 클로드로"* — 그 전 07-29~ DeepSeek v4-pro).
- * Claude가 막히면 DeepSeek 무중단 폴백, 검증(grounding) 탈락 시 결정론 폴백 브리프.
+ * provider = **Claude Sonnet 5.5**(원장 2026-10-26 결정).
+ * Claude가 막히면 ChatGPT 무중단 폴백, 검증(grounding) 탈락 시 결정론 폴백 브리프.
  */

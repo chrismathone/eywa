@@ -1,5 +1,5 @@
 import { formatKoreanDate } from "@/lib/date-kst";
-import { loadRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
+import { loadParentRideLegsFor } from "@/features/shuttle/parent/server/parent-ride-data";
 import type { ParentViewer } from "@/features/shuttle/parent/server/parent-viewer";
 import { AbsentButton } from "@/features/shuttle/parent/components/absent-button";
 import { ParentRideCard } from "@/features/shuttle/parent/components/parent-ride-card";
@@ -40,7 +40,7 @@ export async function MonthDaySheet({
   const live = date === today;
   const { legs, fleet } = holiday
     ? { legs: new Map(), fleet: [] }
-    : await loadRideLegsFor(viewer.tenantId, [kid.id], date, "term", live, editable);
+    : await loadParentRideLegsFor(viewer, [kid.id], date, "term", live, editable);
   const dayText = live ? `오늘 · ${formatKoreanDate(date)}` : `${formatKoreanDate(date)} 일정`;
   const title = many ? `${dates.length}일 함께 수정 · ${pickedLabel(dates)}` : dayText;
 

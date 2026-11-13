@@ -7,6 +7,7 @@
  *  - 통합 1회 호출: assembleCombined(sections) — 멘트·추세(·P1·P2)를 한 번에 {comment,trend,…} 출력(비용·지연↓).
  * 원장은 본문만 편집(출력 계약은 자동). ⚠️ 이 파일은 클라 번들에도 실릴 수 있어 서버 전용 import 금지.
  */
+import { NO_META_RULE } from "./ment-leak";
 
 // comment(단일 멘트·모드 A)·trend(학습 추세)·comment_p1/p2(공지 모드 B 2문단).
 export const PROMPT_TYPES = ["comment", "trend", "comment_p1", "comment_p2"] as const;
@@ -294,7 +295,7 @@ export const REQUIRED_PLACEHOLDER: Record<PromptType, string> = {
 /** 단일 항목 출력 계약 부착(미리보기·개별 테스트용). 그 항목 하나만 JSON으로 출력. */
 export function assembleSingle(body: string, type: PromptType): string {
   const field = SINGLE_FIELD[type];
-  return `${body}\n\n${TONE_RULES}\n\n[출력] JSON만 출력: {"${field}": "..."} — ${field}는 한국어 문장. ${OUTPUT_NEWLINE_RULE} 마크다운 코드블록 금지.`;
+  return `${body}\n\n${TONE_RULES}\n${NO_META_RULE}\n\n[출력] JSON만 출력: {"${field}": "..."} — ${field}는 한국어 문장. ${OUTPUT_NEWLINE_RULE} 마크다운 코드블록 금지.`;
 }
 
 /** 통합 프롬프트 섹션 — 실행 시점에 활성 본문들을 하나로 묶어 1회 호출. field=최종 JSON 키(comment/p1/p2/trend). */
@@ -313,6 +314,7 @@ export function assembleCombined(sections: PromptSection[]): string {
     blocks,
     "",
     TONE_RULES,
+    NO_META_RULE,
     ...(sections.some((s) => s.type === "trend") && sections.length > 1 ? ["", CROSS_SECTION_RULES] : []),
     "",
     `[최종 출력] 위 각 항목을 담아 아래 JSON 하나만 출력하세요(마크다운·코드블록 금지): {${shape}}`,

@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth/current-user", () => ({ getCurrentUser: m.user }));
 vi.mock("@/lib/auth/view-as", () => ({ readonlyTeacherViewError: m.readonly }));
+vi.mock("@/features/owner/server/queries", () => ({ getTenantSettings: vi.fn(async () => ({ modules: { disabled: [] } })) }));
 vi.mock("@/lib/observability/report-error", () => ({ reportError: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURE_EXTRAS, FIXTURE_SNAPSHOT } from "@/features/dashboard/instruments/testing/fixture";
 import { requestPrefill } from "@/features/dashboard/instruments/check-requests";
-import { closeBasis, dueLabel, effectiveStudents, filterWork, isLate, linksByAssignee, matchesWork, myTurn, stageOf, statusText, studentCount, urgentFirst, workCounts, type WorkItem } from "./model";
+import { closeBasis, dueLabel, effectiveStudents, filterWork, isLate, linksByAssignee, matchesWork, myTurn, receivedBy, receivedCounts, stageOf, statusText, studentCount, urgentFirst, workCounts, type WorkItem } from "./model";
 import { FIXTURE_WORK } from "./testing/fixture";
 
 const at = (id: string) => FIXTURE_WORK.items.find((i) => i.id === id)!;
@@ -98,5 +98,17 @@ describe("근거 학생 정리 — 저장 · 묶음 · 다시 짓기가 같은 �
   });
   it("학생 수 = 같은 학생은 한 명(목록 · 상세가 같은 수)", () => {
     expect(studentCount({ links: [{ type: "student", id: "s1", label: "가", assigneeId: "t0" }, { type: "student", id: "s1", label: "가", assigneeId: "t1" }] })).toBe(1);
+  });
+});
+
+describe("받은 업무 요청(강사 홈) — 내가 담당자인 것만", () => {
+  it("🔴 요청자 · 검토자로만 엮인 것은 안 센다 · 내 차례 = 내 확인 · 보고가 남은 것", () => {
+    // 강사 가(t0): w2(검토 대기 · 이미 보고) + w4(마감) — 진행 중 1 · 내 차례 0(남이 검토 중이라고 내 몫이 남은 게 아니다)
+    expect(receivedCounts(FIXTURE_WORK.items, "t0")).toEqual({ total: 2, open: 1, turn: 0 });
+    // 매니저 다(u2): w1 확인만 함 → 보고가 남음
+    expect(receivedCounts(FIXTURE_WORK.items, "u2")).toEqual({ total: 1, open: 1, turn: 1 });
+    // 원장 가(u0)는 w1 · w2 · w4의 요청자지만 담당은 w3 하나뿐
+    expect(receivedBy(FIXTURE_WORK.items, "u0").map((i) => i.id)).toEqual(["w3"]);
+    expect(receivedCounts(FIXTURE_WORK.items, null)).toEqual({ total: 0, open: 0, turn: 0 });
   });
 });

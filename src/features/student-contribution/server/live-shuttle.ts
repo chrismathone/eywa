@@ -3,10 +3,14 @@ import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { BOARDING_STATUS_LABEL, isBoardingStatus } from "@/features/shuttle/types";
 import { sectionResult, type LiveItem } from "@/features/students/ontology/live-contract";
 import { readSection, unavailableSection, type LiveContext } from "./live-context";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 export function readLiveShuttle(c: LiveContext) {
   const href = "/shuttle/today";
   return readSection("shuttle", "셔틀 탑승 기록", href, async () => {
+    const settings = await getTenantSettings();
+    if (!isModuleEnabled(settings.modules.disabled, "shuttle")) return unavailableSection("shuttle", "셔틀 탑승 기록", href, "off");
     if (!(await canAccessTenant(c.role, "shuttle"))) return unavailableSection("shuttle", "셔틀 탑승 기록", href, "forbidden");
     const { data, count, error } = await c.db.from("shuttle_boardings")
       .select("id, boarded_on, status, stop_label, vehicle_label", { count: "exact" }).eq("tenant_id", c.tenant).eq("student_id", c.studentId)

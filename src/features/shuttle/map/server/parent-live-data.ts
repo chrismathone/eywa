@@ -5,7 +5,8 @@ import { reportError } from "@/lib/observability/report-error";
 import { kstToday } from "@/lib/date-kst";
 import { ACADEMY_LOCATION } from "../academy-location";
 import { routeRoles, type ParentLiveLeg } from "../parent-live";
-import { loadRideLegsFor } from "../../parent/server/parent-ride-data";
+import { parentPortalAvailable } from "../../parent/server/parent-availability";
+import { loadParentRideLegsFor } from "../../parent/server/parent-ride-data";
 import type { ParentViewer } from "../../parent/server/parent-viewer";
 
 /** 지도에 찍을 정류장 하나(학부모·직원 지도 공용 모양). */
@@ -34,9 +35,9 @@ export type ParentLiveData = {
  */
 export async function loadParentLiveData(viewer: ParentViewer): Promise<ParentLiveData> {
   const empty: ParentLiveData = { legs: [] };
-  if (viewer.children.length === 0) return empty;
+  if (viewer.children.length === 0 || !(await parentPortalAvailable(viewer))) return empty;
   try {
-    const { legs } = await loadRideLegsFor(viewer.tenantId, viewer.children.map((c) => c.id), kstToday(), "term", true);
+    const { legs } = await loadParentRideLegsFor(viewer, viewer.children.map((c) => c.id), kstToday(), "term", true);
     const mineLegs = viewer.children.flatMap((child) =>
       (legs.get(child.id) ?? []).filter((l) => !l.skipped).map((leg) => ({ child, leg })),
     );

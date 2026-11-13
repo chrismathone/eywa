@@ -11,6 +11,7 @@ import { ToolbarSegment, ToolbarSegmentItem } from "@/components/toolbar";
 import { EyIcon } from "@/components/icons/aywa-icons";
 import { ChevronRight } from "@/components/icons/aywa-icon-compat";
 import { useEmbed } from "@/components/workspace/embed-context";
+import { useLicenseOn } from "@/features/owner/operations-context";
 import { ExploreDonut, type Leaving } from "./donut";
 import { ExploreSidePanel } from "./side-panel";
 import { ExploreSearch } from "./explore-search";
@@ -85,6 +86,7 @@ const sessionPrefs: Partial<ExplorePrefs> & { wide?: boolean } = {};
  * 네트워크 = 떠나기 직전 판을 맡기고(`prepareNetworkLeave`) 새 판이 그 모습에서 이어 보간한다. 우클릭 = 한 칸 뒤로 · 전환 효과 생략이면 모두 즉시.
  */
 export function ExploreView({ model, trail, initialSector, prefs, contribution, facts: factsPromise }: Props) {
+  const aiOn = useLicenseOn("ai_analysis");
   const router = useRouter();
   const embed = useEmbed();
   const [, startTransition] = useTransition();
@@ -379,13 +381,13 @@ export function ExploreView({ model, trail, initialSector, prefs, contribution, 
               </div>
             )}
           </div>
-          <div className={styles.half}>
+          {kind !== "student" || aiOn ? <div className={styles.half}>
             <div className={`text-foreground text-xs ${styles.colHead}`}>
               <EyIcon name="sparkle" size={15} className="text-primary" />
               분석·판단
             </div>
             <AnalysisCard studentId={kind === "student" ? model.center.id : null} analysis={model.analysis} focus={focus} />
-          </div>
+          </div> : null}
         </div>
       </div>
     </div>

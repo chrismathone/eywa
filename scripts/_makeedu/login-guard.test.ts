@@ -7,7 +7,7 @@
  *    login-bot-check.js 사본 + 최소 jQuery 대역)로 submitLogin·openMakeeduContext·runHumanLogin을 실제 브라우저로 돈다.
  *    🔴 makeedu에는 아무 요청도 보내지 않는다 — 127.0.0.1 밖으로 나가는 요청은 막고 센다. 브라우저가 없으면 ②는 건너뛴다.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { createRequire } from "node:module";
 import fs from "node:fs";
 import os from "node:os";
@@ -839,42 +839,59 @@ describe.skipIf(!browser)("openMakeeduContext — 세션 재사용 → 멈춤 �
   });
 
   it("멈춤 표시 쓰기 실패 — 한 번 더 · 안 되면 예비 파일(효력 유지 · 더 최근 것을 읽음) · 둘 다 안 되면 크게 알리고 오류에 싣는다", async () => {
-    server.mode = "NO_LOGIN_CNT";
-    // 본 표시 = 다른 자격의 낡은 표시 · 읽기 전용(덮어쓰기 rename이 EPERM으로 실패 — 백신·잠금 흉내). 다른 자격이라 이번 실행은 한 번 시도한다.
-    const writeRO = (file: string, at: string) => {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      if (fs.existsSync(file)) fs.chmodSync(file, 0o666);
-      fs.writeFileSync(file, JSON.stringify({ code: "NO_LOGIN_CNT", message: "옛", at, credSalt: "0".repeat(32), credHash: "1".repeat(32) }));
-      fs.chmodSync(file, 0o444);
-    };
-    writeRO(G.blockFileOf(sessionFile), "2026-11-01T00:00:00.000Z");
-    const first = await open(CREDS).catch((x: Error) => x);
-    expect(first).toMatchObject({ code: "NO_LOGIN_CNT" });
-    expect(server.posts.length).toBe(1);
-    const alt = G.readBlock(sessionFile);
-    expect(alt).toMatchObject({ code: "NO_LOGIN_CNT", fallback: true }); // 본(낡음)보다 최근인 예비 표시를 읽는다
-    expect(G.blockApplies(alt, CREDS.MAKEEDU_ID, CREDS.MAKEEDU_PW)).toBe(true); // 예비 표시로도 다음 실행은 막힌다
-    G._resetAttemptForTest();
-    const second = await open(CREDS).catch((x: Error) => x);
-    expect(second).toMatchObject({ blocked: true });
-    expect(server.posts.length).toBe(1);
-    // 둘 다 못 쓰는 경우 — 예비도 다른 자격의(더 최근) 읽기 전용 표시로
-    writeRO(G.blockFallbackOf(sessionFile), "2026-11-02T00:00:00.000Z");
-    G._resetAttemptForTest();
-    const errors: string[] = [];
-    const origError = console.error;
-    console.error = (m: string) => errors.push(String(m));
+    // Windows는 읽기 전용 파일 위로 rename하면 EPERM이지만 POSIX(macOS·Linux)는 그대로 덮어쓴다 —
+    // 어느 OS에서든 같은 실패를 보도록 "읽기 전용 대상 위 rename = EPERM"을 흉내 낸다.
+    const realRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      let readOnly = false;
+      try {
+        readOnly = (fs.statSync(to).mode & 0o200) === 0;
+      } catch {
+        /* 대상 없음 — 그대로 진행 */
+      }
+      if (readOnly) throw Object.assign(new Error(`EPERM: operation not permitted, rename '${String(from)}' -> '${String(to)}'`), { code: "EPERM" });
+      return realRename(from, to);
+    });
     try {
-      const third = await open(CREDS).catch((x: Error) => x);
-      expect(third).toMatchObject({ code: "NO_LOGIN_CNT", blockNote: "write_failed" });
-      expect((third as Error).message).toContain("⚠️ 멈춤 표시 저장 실패 — 다음 실행이 같은 자격으로 다시 시도할 수 있음");
+      server.mode = "NO_LOGIN_CNT";
+      // 본 표시 = 다른 자격의 낡은 표시 · 읽기 전용(덮어쓰기 rename이 EPERM으로 실패 — 백신·잠금 흉내). 다른 자격이라 이번 실행은 한 번 시도한다.
+      const writeRO = (file: string, at: string) => {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        if (fs.existsSync(file)) fs.chmodSync(file, 0o666);
+        fs.writeFileSync(file, JSON.stringify({ code: "NO_LOGIN_CNT", message: "옛", at, credSalt: "0".repeat(32), credHash: "1".repeat(32) }));
+        fs.chmodSync(file, 0o444);
+      };
+      writeRO(G.blockFileOf(sessionFile), "2026-11-01T00:00:00.000Z");
+      const first = await open(CREDS).catch((x: Error) => x);
+      expect(first).toMatchObject({ code: "NO_LOGIN_CNT" });
+      expect(server.posts.length).toBe(1);
+      const alt = G.readBlock(sessionFile);
+      expect(alt).toMatchObject({ code: "NO_LOGIN_CNT", fallback: true }); // 본(낡음)보다 최근인 예비 표시를 읽는다
+      expect(G.blockApplies(alt, CREDS.MAKEEDU_ID, CREDS.MAKEEDU_PW)).toBe(true); // 예비 표시로도 다음 실행은 막힌다
+      G._resetAttemptForTest();
+      const second = await open(CREDS).catch((x: Error) => x);
+      expect(second).toMatchObject({ blocked: true });
+      expect(server.posts.length).toBe(1);
+      // 둘 다 못 쓰는 경우 — 예비도 다른 자격의(더 최근) 읽기 전용 표시로
+      writeRO(G.blockFallbackOf(sessionFile), "2026-11-02T00:00:00.000Z");
+      G._resetAttemptForTest();
+      const errors: string[] = [];
+      const origError = console.error;
+      console.error = (m: string) => errors.push(String(m));
+      try {
+        const third = await open(CREDS).catch((x: Error) => x);
+        expect(third).toMatchObject({ code: "NO_LOGIN_CNT", blockNote: "write_failed" });
+        expect((third as Error).message).toContain("⚠️ 멈춤 표시 저장 실패 — 다음 실행이 같은 자격으로 다시 시도할 수 있음");
+      } finally {
+        console.error = origError;
+      }
+      expect(errors.join("\n")).toMatch(/🔴🔴 자동 로그인 멈춤 표시를 남기지 못했습니다/);
+      expect(server.posts.length).toBe(2);
+      for (const f of [G.blockFileOf(sessionFile), G.blockFallbackOf(sessionFile)]) if (fs.existsSync(f)) fs.chmodSync(f, 0o666);
+      fs.rmSync(dir, { recursive: true, force: true });
     } finally {
-      console.error = origError;
+      renameSpy.mockRestore();
     }
-    expect(errors.join("\n")).toMatch(/🔴🔴 자동 로그인 멈춤 표시를 남기지 못했습니다/);
-    expect(server.posts.length).toBe(2);
-    for (const f of [G.blockFileOf(sessionFile), G.blockFallbackOf(sessionFile)]) if (fs.existsSync(f)) fs.chmodSync(f, 0o666);
-    fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it("confirmLoggedIn — main.do 확인(200 · 로그인 계열 아님 · 로그인 폼 아님)일 때만 true", async () => {

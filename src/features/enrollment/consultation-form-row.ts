@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { canonicalSchoolName, type SchoolSaveAlias } from "@/features/schools/school-name";
+import { phoneLabel } from "@/lib/format/phone";
 const opt = z.string().optional().nullable();
 export const createSchema = z.object({
   prospectName: z.string().min(1, "학생 이름을 입력해주세요"),
@@ -64,10 +65,10 @@ export function buildConsultationRow(d: FullForm, aliases: readonly SchoolSaveAl
     gender: d.gender || null,
     blood_type: d.bloodType || null,
     birth_date: d.birthDate || null,
-    student_phone: d.studentPhone || null,
-    home_phone: d.homePhone || null,
+    student_phone: phoneLabel(d.studentPhone),
+    home_phone: phoneLabel(d.homePhone),
     parent_name: d.parentName || null,
-    parent_phone: d.parentPhone || null,
+    parent_phone: phoneLabel(d.parentPhone),
     parent_relation: d.parentRelation || null,
     address: d.address || null,
     zip_code: d.zipCode || null,

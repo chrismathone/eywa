@@ -163,10 +163,9 @@ export function AssistantOverlay({
   const retry = (turn: Turn) => {
     if (!canAskHere) return;
     setBusyNotice(null);
-    void assistant.ask({ convKey: current.key, threadId: current.threadId, question: turn.question, onBusy: onBusy(current.key, turn.question) });
+    void assistant.ask({ convKey: current.key, threadId: current.threadId, question: turn.question, redoOf: turn.messageId, onBusy: onBusy(current.key, turn.question) });
     requestAnimationFrame(() => scrollToLastTurn(scrollBehavior()));
   };
-
   const startNew = () => {
     setShowAdvice(false);
     assistant.newConversation();
@@ -506,7 +505,14 @@ function ConversationBody({
       <ol className="space-y-10">
         {conv.turns.map((turn) => (
           <li key={turn.key} data-turn="" className="scroll-mt-4">
-            <AssistantTurn turn={turn} canRetry={canAsk} onRetry={onRetry} onReload={onReload} onControl={onControl} />
+            <AssistantTurn
+              turn={turn}
+              canRetry={canAsk}
+              onRetry={onRetry}
+              // 강도를 올려 다시 묻기는 이 화면에서 방금 받은 마지막 답에만 권한다(지난 답·다시 연 대화엔 붙이지 않는다 · 원장 2026-11-12).
+              onReload={onReload}
+              onControl={onControl}
+            />
           </li>
         ))}
       </ol>

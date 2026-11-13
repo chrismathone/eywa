@@ -32,13 +32,19 @@ function Notice({ text }: { text: string }) {
   );
 }
 
-/** 흘려받는 동안의 자리 — 실물과 같은 순서(머리 → 요약 줄 → 표). */
-export function TeacherChurnSkeleton() {
+/**
+ * 흘려받는 동안의 자리 — 실물과 같은 순서(머리 → 요약 줄 → 표·차트 → 범례 줄).
+ * 🔴 이 카드는 퇴원관리 **필터 툴바 위**에 있다(page.tsx) — 뼈대가 실물보다 낮으면 카드가 뜨는 순간 툴바가 밀린다.
+ *    높이는 처음 여는 보기를 따른다: 표 = 표의 최대 높이(teacher-churn-table.tsx `max-h-[34rem]`과 같이 고칠 것) ·
+ *    차트 = 차트 칸(teacher-churn-chart.tsx `h-64` + 위 줄 ≈ 18rem). 강사가 적어 표가 짧으면 뜰 때 위로 줄어든다(아래로 밀리지 않는다).
+ */
+export function TeacherChurnSkeleton({ view = "table" }: { view?: ChurnView }) {
   return (
     <section className={CARD} aria-busy aria-label="강사별 퇴원율 추이 불러오는 중">
       <h2 className="text-foreground text-base font-bold">강사별 퇴원율 추이</h2>
       <div className="bg-bg-soft mt-2 h-4 w-2/3 animate-pulse rounded" />
-      <div className="bg-bg-soft mt-4 h-72 animate-pulse rounded-lg" />
+      <div className={`bg-bg-soft mt-4 animate-pulse rounded-lg ${view === "chart" ? "h-72" : "h-[34rem]"}`} />
+      <div className="bg-bg-soft mt-2 h-4 w-1/2 animate-pulse rounded" />
     </section>
   );
 }

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { phoneLabel } from "@/lib/format/phone";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { canWriteTenant } from "@/lib/auth/perm-matrix";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -183,7 +184,7 @@ export async function saveVehicle(formData: FormData): Promise<ShuttleActionStat
   const id = String(formData.get("id") ?? "") || null;
   const name = String(formData.get("name") ?? "").trim();
   const driverName = String(formData.get("driverName") ?? "").trim() || null;
-  const driverPhone = String(formData.get("driverPhone") ?? "").trim() || null;
+  const driverPhone = phoneLabel(String(formData.get("driverPhone") ?? ""));
   if (!name) return { error: "차량 이름을 입력하세요" };
   if (name.length > MAX_VEHICLE_NAME) return { error: `차량 이름은 ${MAX_VEHICLE_NAME}자까지입니다` };
 

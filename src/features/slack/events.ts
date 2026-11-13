@@ -7,6 +7,13 @@ import type { NotificationType } from "@/features/notifications/types";
  * 🔴 새 알림 종류를 만들면 여기에도 한 줄 + [`samples.ts`](./samples.ts)에 샘플(가드 `events.test.ts`).
  */
 export type ForwardEventOption = { type: NotificationType; label: string; group: string };
+export type ForwardEventAvailability = {
+  approvals: boolean;
+  classnote: boolean;
+  makeedu: boolean;
+  todaysMath: boolean;
+  videoReview: boolean;
+};
 
 export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "enrollment_assigned", label: "내 반에 학생 배정", group: "수업·반" },
@@ -48,10 +55,26 @@ export const FORWARD_EVENT_OPTIONS: readonly ForwardEventOption[] = [
   { type: "help_question", label: "도움말 질문", group: "도움말·연동" },
   { type: "help_answer", label: "도움말 답변", group: "도움말·연동" },
   { type: "makeedu_login_failed", label: "makeedu 로그인 실패", group: "도움말·연동" },
+  { type: "student_seat_limit_exceeded", label: "재원생 좌석 한도 초과", group: "도움말·연동" },
   { type: "sync_agent_offline", label: "연동 PC 신호 끊김", group: "도움말·연동" },
   { type: "support_answer", label: "개선요청 답변", group: "도움말·연동" },
   { type: "slack_broken", label: "슬랙 발송 멈춤", group: "도움말·연동" },
 ];
+
+const CLASSNOTE_EVENTS = new Set<NotificationType>(["student_attendance_notice", "classnote_parent_post", "classnote_parent_comment", "report_send_failed", "notice_send_failed"]);
+const APPROVAL_EVENTS = new Set<NotificationType>(["approval_requested", "approval_decided", "approval_comment"]);
+const VIDEO_EVENTS = new Set<NotificationType>(["homework_video_link", "video_homework_submitted", "video_homework_missing", "video_homework_unassigned", "homework_video_upload_failed"]);
+
+export function forwardEventOptionsFor(availability: ForwardEventAvailability): readonly ForwardEventOption[] {
+  return FORWARD_EVENT_OPTIONS.filter((option) => {
+    if (CLASSNOTE_EVENTS.has(option.type)) return availability.classnote;
+    if (APPROVAL_EVENTS.has(option.type)) return availability.approvals;
+    if (option.type === "makeedu_login_failed" || option.type === "student_seat_limit_exceeded") return availability.makeedu;
+    if (option.type === "todays_math_exam_report") return availability.todaysMath;
+    if (VIDEO_EVENTS.has(option.type)) return availability.videoReview;
+    return true;
+  });
+}
 
 const LABEL_BY_TYPE = new Map<string, string>(FORWARD_EVENT_OPTIONS.map((o) => [o.type, o.label]));
 

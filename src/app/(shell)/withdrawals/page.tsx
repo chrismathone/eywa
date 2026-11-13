@@ -784,6 +784,15 @@ export default async function WithdrawalsPage({
         <BigStat label="필터 결과" value={rows.length} unit="건" tone="blue" icon={<Filter size={16} strokeWidth={1.8} />} />
       </StatStrip>
 
+      {/* 강사별 퇴원율 추이 — 아래 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 권한 '강사별 퇴원율'이 열린 사람만.
+          🔴 필터 툴바 **위**에 둔다(원장 2026-11-13 *"필터를 실제 적용되는곳 위에"*) — 툴바 아래에는 필터가 걸리는 카드만 잇는다
+          (등록 후 띠 · 월별 추이 · 분석 카드 · 명단 · 사유 분석). 필터가 안 걸리는 카드를 툴바 아래로 되돌리지 말 것. */}
+      {churnGate ? (
+        <Suspense fallback={<TeacherChurnSkeleton view={trendPrefs.churnView} />}>
+          <TeacherChurnSection initialSort={trendPrefs.churnSort} initialView={trendPrefs.churnView} />
+        </Suspense>
+      ) : null}
+
       {/* 세는 달 = 수업료를 낸 마지막 달(원장 2026-10-29). 규칙 설명 문장은 원장 지시로 뺐다(2026-11-11 *"이 멘트도 제거"*) —
           앞 달 명단에 들어간 건수 안내만 남긴다(그때만 선다). */}
       {carriedTotal > 0 ? (
@@ -939,13 +948,6 @@ export default async function WithdrawalsPage({
             <WithdrawalBreakdownCard views={{ ...breakdownViews, teacher: teacherNow.view }} initialAxis={axis} teacherError={teacherNow.error} />
           )}
         </div>
-      ) : null}
-
-      {/* 강사별 퇴원율 추이 — 위 필터와 따로 세는 강사평가 값(카드 머리에 기준을 적는다). 권한 '강사별 퇴원율'이 열린 사람만. */}
-      {churnGate ? (
-        <Suspense fallback={<TeacherChurnSkeleton />}>
-          <TeacherChurnSection initialSort={trendPrefs.churnSort} initialView={trendPrefs.churnView} />
-        </Suspense>
       ) : null}
 
       {rows.length === 0 ? (

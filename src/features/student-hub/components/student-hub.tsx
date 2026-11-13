@@ -1,4 +1,5 @@
 import { EmbedLink as Link } from "@/components/embed-link";
+import { phoneLabel } from "@/lib/format/phone";
 import { getStudentHub } from "../server/query";
 import { LiveSectionView } from "@/features/student-contribution/components/live-section-view";
 import { kstShortStamp } from "@/lib/date-kst";
@@ -35,7 +36,7 @@ export async function StudentHub({ studentId, month }: { studentId: string; mont
       <span className="ml-auto text-xs"><span className="num">{kstShortStamp(data.checkedAt)}</span> 조회 · {readable.length}개 자료 영역 · 분석 {data.analyses.length}건</span>
       </div>
       <details className={s.profile}><summary>학생·보호자 기본정보</summary><dl>
-        {[["학교·학년", [data.student.school, data.student.grade].filter(Boolean).join(" · ")], ["원생번호", data.student.studentCode], ["영문명", data.student.englishName], ["클래스노트 이름", data.student.classnoteName], ["학생 연락처", data.student.studentPhone], ["보호자", data.student.parentName], ["보호자 연락처", data.student.parentPhone], ["입학일", data.student.enrolledAt], ["퇴원일", data.student.withdrawnAt]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "기록 없음"}</dd></div>)}
+        {[["학교·학년", [data.student.school, data.student.grade].filter(Boolean).join(" · ")], ["원생번호", data.student.studentCode], ["영문명", data.student.englishName], ...(data.classnoteOn ? [["클래스노트 이름", data.student.classnoteName]] : []), ["학생 연락처", phoneLabel(data.student.studentPhone)], ["보호자", data.student.parentName], ["보호자 연락처", phoneLabel(data.student.parentPhone)], ["입학일", data.student.enrolledAt], ["퇴원일", data.student.withdrawnAt]].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value || "기록 없음"}</dd></div>)}
       </dl><Link href={`${base}?tab=overview`} className={s.link}>프로필·기존 요약 전체 보기</Link></details>
 
     <section id="student-hub-analysis" className={s.block} aria-labelledby="hub-analysis-title">

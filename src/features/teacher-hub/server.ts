@@ -13,6 +13,8 @@ import { isMergedStudent } from "@/features/students/status/merged";
 import { careDocumentSchema } from "@/features/student-care/model";
 import { evidenceHref } from "@/features/student-care/model";
 import { buildTeacherGraph,capacityRequestSchema,compareGrades,hasCurrentClassPeriod,metricView,monthSchema,promiseStatus,teacherInsights,type CapacityPlan,type HubClass,type HubEnrollment,type HubRecord,type HubStudent,type SourceCoverage,type TeacherHub } from "./model";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 
 export class TeacherHubError extends Error { constructor(message:string,public status=400){super(message);} }
 export async function teacherHubAccess(write=false){
@@ -57,20 +59,22 @@ export async function loadTeacherHub(opts:{teacherId?:string;month?:string}={}):
     return own||slots.length||delegated.length?[{id:c.id,name:c.class_name,subject:c.subject,assignment:[own?"담임":"",slots.length?"교시 담당":"",delegated.length?"임시 위임":""].filter(Boolean).join(" · "),sourceIds:[...(own?[`classes:${c.id}`]:[]),...slots.map(s=>`class_schedules:${s.id}`),...delegated.map(d=>`class_delegations:${d.id}`)]}]:[];
   });
   const coverage:SourceCoverage[]=[];
-  async function optional<T>(key:string,label:string,allowed:boolean,read:()=>Promise<T[]>,note:string):Promise<T[]>{
+  async function optional<T>(key:string,label:string,allowed:boolean,read:()=>Promise<T[]>,note:string,enabled=true):Promise<T[]>{
+    if(!enabled)return [];
     if(!allowed){coverage.push({key,label,state:"forbidden",count:null,note:"원본 메뉴 열람 권한이 필요합니다"});return [];}
     try{const rows=await read();coverage.push({key,label,state:"ready",count:rows.length,note});return rows;}
     catch{coverage.push({key,label,state:"unavailable",count:null,note:"자료 조회 실패 · 0건으로 해석하지 않습니다"});return [];}
   }
-  const permissions=await Promise.all((["lesson_reports","consultations","documents","enrollment","ecs","mcs","newcomers"] as const).map(k=>canAccessTenant(user.systemRole,k)));
-  const proofPermissions={lesson_report:permissions[0],consultation:permissions[1],english_sheet:permissions[4],math_sheet:permissions[5]};
+  const [permissions,settings]=await Promise.all([Promise.all((["lesson_reports","consultations","documents","enrollment","ecs","mcs","newcomers"] as const).map(k=>canAccessTenant(user.systemRole,k))),getTenantSettings()]);
+  const ecsOn=isModuleEnabled(settings.modules.disabled,"ecs"),mcsOn=isModuleEnabled(settings.modules.disabled,"mcs"),newcomersOn=isModuleEnabled(settings.modules.disabled,"newcomers");
+  const proofPermissions={lesson_report:permissions[0],consultation:permissions[1],english_sheet:permissions[4]&&ecsOn,math_sheet:permissions[5]&&mcsOn};
   const [periods,rawEnrollments,reports,consults,careRows,sheetRows,capacityResult]=await Promise.all([
     loadTeacherPeriods(db,tenant,teacher.id,[month,shiftMonth(month,-1)]),
     fetchAllPagedInChunks<{id:string;student_id:string;class_id:string;start_date:string;end_date:string|null;on_hold:boolean;is_transferred:boolean}>(classes.map(c=>c.id),(ids,a,b)=>db.from("enrollments").select("id,student_id,class_id,start_date,end_date,on_hold,is_transferred").eq("tenant_id",tenant).in("class_id",ids).lte("start_date",today).or(`end_date.is.null,end_date.gte.${today}`).order("id").range(a,b)),
     optional("report","직접 작성 수업보고",permissions[0],()=>fetchAllPaged<{id:string;student_id:string;report_date:string;class_id:string|null}>((a,b)=>db.from("lesson_reports").select("id,student_id,report_date,class_id").eq("tenant_id",tenant).eq("created_by",teacher.id).is("revoked_at",null).gte("report_date",range.from).lte("report_date",end).order("id").range(a,b)),`${month} 수업일 기준 · 직접 작성 기록; 작성률은 저장 집계와 구분`),
     optional("consultation","직접 상담 기록",permissions[1],()=>fetchAllPaged<{id:string;student_id:string;consulted_at:string;follow_up_done:boolean|null}>((a,b)=>db.from("student_consultations").select("id,student_id,consulted_at,follow_up_done").eq("tenant_id",tenant).eq("counselor_id",teacher.id).gte("consulted_at",`${range.from}T00:00:00+09:00`).lte("consulted_at",`${end}T23:59:59.999+09:00`).order("id").range(a,b)),`${month} 상담일 기준 · 상담자ID 연결`),
-    optional("promise","담당 약속",permissions[6],()=>fetchAllPaged<{id:string;student_id:string|null;due_on:string;state:string;document:unknown}>((a,b)=>db.from("student_care_commitments").select("id,student_id,due_on,state,document").eq("tenant_id",tenant).eq("owner_id",teacher.id).neq("state","cancelled").order("id").range(a,b)),"현재 담당 약속 전체 · 선택 월과 별도"),
-    optional("sheet","마지막 수정한 영어 개별 시트",permissions[4],()=>fetchAllPaged<{id:string;class_id:string;student_id:string;mark_date:string;progress_note:string|null;score:string|null}>((a,b)=>db.from("class_sheet_student_marks").select("id,class_id,student_id,mark_date,progress_note,score").eq("tenant_id",tenant).eq("updated_by",teacher.id).gte("mark_date",range.from).lte("mark_date",end).order("id").range(a,b)),`${month} 기록일 기준 · 마지막 수정자 연결; 최초 작성자·당시 담당자와 다를 수 있음`),
+    optional("promise","담당 약속",permissions[6],()=>fetchAllPaged<{id:string;student_id:string|null;due_on:string;state:string;document:unknown}>((a,b)=>db.from("student_care_commitments").select("id,student_id,due_on,state,document").eq("tenant_id",tenant).eq("owner_id",teacher.id).neq("state","cancelled").order("id").range(a,b)),"현재 담당 약속 전체 · 선택 월과 별도",newcomersOn),
+    optional("sheet","마지막 수정한 영어 개별 시트",permissions[4],()=>fetchAllPaged<{id:string;class_id:string;student_id:string;mark_date:string;progress_note:string|null;score:string|null}>((a,b)=>db.from("class_sheet_student_marks").select("id,class_id,student_id,mark_date,progress_note,score").eq("tenant_id",tenant).eq("updated_by",teacher.id).gte("mark_date",range.from).lte("mark_date",end).order("id").range(a,b)),`${month} 기록일 기준 · 마지막 수정자 연결; 최초 작성자·당시 담당자와 다를 수 있음`,ecsOn),
     // 배정 상한(s2_0055) — 이번 달 것만. 표가 없거나 못 읽으면 '조회 확인 필요'로(0건으로 위장하지 않는다).
     db.from("teacher_capacity_plans").select("teacher_id,month,version,max_students,basis,updated_at").eq("tenant_id",tenant).eq("teacher_id",teacher.id).eq("month",today.slice(0,7)).maybeSingle(),
   ]);

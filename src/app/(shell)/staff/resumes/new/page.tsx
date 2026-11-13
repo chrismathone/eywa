@@ -7,6 +7,7 @@ import { emptyResume } from "@/features/staff/resume/resume";
 import { isImportArtifactEmail } from "@/features/staff/email";
 import { getStaffById } from "@/features/staff/server/queries";
 import { ResumeSheet } from "../_components/resume-sheet";
+import { phoneLabel } from "@/lib/format/phone";
 
 // 명칭(원장 지시 2026-08-07): **직원등록(신규, 연결 없음) 때만 "직원 명부"**, 그 외(기존 직원 연결·열람·수정)는 "이력서".
 export async function generateMetadata({ searchParams }: { searchParams: Promise<{ staff?: string }> }) {
@@ -31,7 +32,7 @@ export default async function NewResumePage({
     data.personal.nameEn = staff.englishName ?? "";
     // 플레이스홀더(@imported.local)는 실이메일이 아니므로 이력서에 안 옮긴다.
     data.personal.email = isImportArtifactEmail(staff.email) ? "" : staff.email;
-    data.personal.phone = staff.phone ?? "";
+    data.personal.phone = phoneLabel(staff.phone) ?? "";
     data.contract.startDate = staff.hireDate ?? "";
     // 지정 목록 밖 부서(시트 이관분 국어과·차량팀 등)도 그대로 옮긴다 — 잘라내면 프리필에서 부서가 사라진다.
     data.contract.division = staff.department ?? "";

@@ -27,6 +27,8 @@ import { teacherNameFor } from "@/features/teacher-view/teacher-name";
 import { classNameFor } from "@/features/teacher-view/class-name";
 import { getStudentSiblings } from "@/features/students/server/siblings";
 import { ProfileSiblings } from "../_components/profile-siblings";
+import { phoneLabel } from "@/lib/format/phone";
+import { isModuleEnabled } from "@/lib/modules";
 
 const won = (n: number) => n.toLocaleString();
 
@@ -102,7 +104,7 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
             {student.englishName ? <Field label="영문명" value={student.englishName} /> : null}
             {student.nickname ? <Field label="닉네임" value={student.nickname} /> : null}
             {student.studentCode ? <Field label="원생번호" value={student.studentCode} mono /> : null}
-            {student.attendanceCode ? (
+            {student.attendanceCode && isModuleEnabled(settings.modules.disabled, "kiosk") ? (
               <Field label="출결번호" value={student.attendanceCode} mono />
             ) : null}
             {student.gender ? (
@@ -113,19 +115,19 @@ export async function OverviewTab({ student, canSeeBilling }: { student: Student
               <Field label="졸업연도" value={student.graduationYear} mono />
             ) : null}
             {student.studentPhone ? (
-              <Field label="학생 연락처" value={student.studentPhone} mono />
+              <Field label="학생 연락처" value={phoneLabel(student.studentPhone)} mono />
             ) : null}
-            {student.homePhone ? <Field label="집전화" value={student.homePhone} mono /> : null}
+            {student.homePhone ? <Field label="집전화" value={phoneLabel(student.homePhone)} mono /> : null}
             {student.otherPhone ? (
-              <Field label="기타 연락처" value={student.otherPhone} mono />
+              <Field label="기타 연락처" value={phoneLabel(student.otherPhone)} mono />
             ) : null}
             <Field label="학부모 이름" value={student.parentName} />
             {student.parentRelation ? <Field label="보호자 관계" value={student.parentRelation} /> : null}
-            <Field label="학부모 연락처" value={student.parentPhone} mono />
+            <Field label="학부모 연락처" value={phoneLabel(student.parentPhone)} mono />
             {/* 보호자2(s2_0022) — 적어 둔 칸만 보인다(보호자1 줄은 빈칸도 '—'로 그대로). */}
             {student.parent2Name ? <Field label="보호자2 이름" value={student.parent2Name} /> : null}
             {student.parent2Relation ? <Field label="보호자2 관계" value={student.parent2Relation} /> : null}
-            {student.parent2Phone ? <Field label="보호자2 연락처" value={student.parent2Phone} mono /> : null}
+            {student.parent2Phone ? <Field label="보호자2 연락처" value={phoneLabel(student.parent2Phone)} mono /> : null}
             <ProfileSiblings siblings={siblings.siblings} lang={lang} />
             {student.email ? <Field label="이메일" value={student.email} mono /> : null}
             {student.address || student.addressDetail || student.zipCode ? (

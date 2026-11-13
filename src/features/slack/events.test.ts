@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { FORWARD_EVENT_OPTIONS, forwardEventLabel, sanitizeForwardEventTypes } from "./events";
+import { FORWARD_EVENT_OPTIONS, forwardEventLabel, forwardEventOptionsFor, sanitizeForwardEventTypes } from "./events";
 import { SAMPLE_NOTIFICATIONS } from "./samples";
 
 /** 🔴 알림 표의 모든 종류는 보낼 수 있다(0298a 인박스 트리거) — 빠지는 건 생성 중단된 브리핑뿐. 새 종류는 분류를 강제한다. */
@@ -15,6 +15,22 @@ function allNotificationTypes(): string[] {
 }
 
 describe("슬랙 알림 종류 목록", () => {
+  it("모든 스위치가 켜진 지점은 기존 목록을 그대로 보고, 꺼진 종류만 숨긴다", () => {
+    const allOn = { approvals: true, classnote: true, makeedu: true, todaysMath: true, videoReview: true };
+    expect(forwardEventOptionsFor(allOn)).toEqual(FORWARD_EVENT_OPTIONS);
+
+    const visible = forwardEventOptionsFor({ approvals: false, classnote: false, makeedu: false, todaysMath: false, videoReview: false });
+    expect(visible.map((option) => option.type)).not.toEqual(expect.arrayContaining([
+      "approval_requested",
+      "classnote_parent_post",
+      "makeedu_login_failed",
+      "student_seat_limit_exceeded",
+      "todays_math_exam_report",
+      "video_homework_submitted",
+    ]));
+    expect(visible.map((option) => option.type)).toContain("attendance_complete");
+  });
+
   it("모든 알림 종류가 목록에 있거나 명시적으로 제외돼 있다", () => {
     const all = allNotificationTypes();
     expect(all.length).toBeGreaterThan(20);

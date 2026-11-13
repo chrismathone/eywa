@@ -13,6 +13,7 @@
  */
 import { hasBatchim } from "@/lib/text/josa";
 import { givenNameOf, studentNameVariants } from "@/features/report-templates/name-mention";
+import { stripMentLeaks } from "./ment-leak";
 
 export type EnglishMentInput = {
   /** aywa 표시 이름(동명이인 접미 가능, 예 "박서연C"). */
@@ -167,8 +168,9 @@ function cleanField(v: unknown): string {
 export function parseEnglishMent(data: unknown): { intro: string; comment: string } | null {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const rec = data as Record<string, unknown>;
-  const intro = cleanField(rec.intro);
-  const comment = cleanField(rec.comment);
+  // 혼잣말·지시 되받기·찌꺼기 문장은 뺀다(원장 2026-11-12, `ment-leak.ts`) — 코멘트가 다 빠지면 아래에서 실패로.
+  const intro = stripMentLeaks(cleanField(rec.intro)).text;
+  const comment = stripMentLeaks(cleanField(rec.comment)).text;
   // 🔴 코멘트가 없으면 실패로 본다 — 인사말만 온 결과를 받으면 코멘트 문단이 빠진 글이 '다 썼다'로 통과한다
   //    (인사말은 태도·메모가 없으면 일부러 비우는 칸이라 없어도 되지만, 코멘트는 글의 본문이다. 적대 재리뷰 2026-09-10).
   if (!comment) return null;

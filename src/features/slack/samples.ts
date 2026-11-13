@@ -124,6 +124,9 @@ export const SAMPLE_NOTIFICATIONS: Record<string, SampleNotification> = {
     body: "makeedu 자동 동기화가 멈췄습니다 — 동기화 PC의 AYWA 연동 앱에서 'makeedu 다시 로그인'을 눌러 확인 한 번 해 주세요. (감지 2026-11-06)",
     link: "/owner?tab=sheets&sub=makeedu",
   },
+  student_seat_limit_exceeded: {
+    title: "좌석 한도 초과", body: "makeedu 학생 가져오기 후 재원생 101명 · 좌석 한도 100석", link: "/students",
+  },
   support_answer: { title: "개선요청에 답변이 달렸습니다", body: "출석부 인쇄 여백 조정 요청 — 처리 완료", link: "/help" },
   staff_task_digest: { title: "늦은 할 일 3건", body: "보고서 발송 실패 2 · 상담 후속조치 1 — 김선생 2 · 이선생 1", link: "/dashboard" },
   withdrawal_bypass: {

@@ -52,8 +52,8 @@ import {
   BLOOD_OPTIONS,
   COMMON_FIELDS,
   CONSULTATION_PATHS,
-  ENGLISH_GROUPS,
-  ENGLISH_TEST_TYPES,
+  englishGroupsFor,
+  englishTestTypesFor,
   GENDER_OPTIONS,
   RELATION_OPTIONS,
   SIBLINGS_OPTIONS,
@@ -188,7 +188,9 @@ export function ConsultationFullForm({
   const inFrame = useInFrame();
   const isCreate = mode === "create";
   const shuttleOn = useModuleOn("shuttle");
+  const eieOn = useModuleOn("eie");
   const recordingOn = useLicenseOn("meeting_recording");
+  const aiOn = useLicenseOn("ai_analysis");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioRecoveryId, setAudioRecoveryId] = useState<string | null>(null);
   const [recordingDraftId, setRecordingDraftId] = useState("");
@@ -282,6 +284,7 @@ export function ConsultationFullForm({
   const setField = (subj: string, key: string, val: string) =>
     setDetails((d) => ({ ...d, [subj]: { ...(d[subj] ?? {}), [key]: val } }));
   const englishType = details.english?.testType ?? "ai";
+  const visibleEnglishType = !eieOn && englishType === "eie" ? "ai" : englishType;
 
   // 상담 내용 '✨ AI 제안' — uncontrolled textarea라 ref로 값 주입 + input 이벤트 dispatch(초안/동시편집 가드 포착).
   const parentRequestRef = useRef<HTMLTextAreaElement>(null);
@@ -289,7 +292,7 @@ export function ConsultationFullForm({
   const suggestedPR = (aiSuggestedParentRequest ?? "").trim();
   // 저장값이 제안을 이미 포함(교체/추가 후 저장)하면 숨김 — includes가 정확일치·부분포함 둘 다 커버.
   const showParentRequestSuggestion =
-    !readOnly && !isCreate && !!suggestedPR && !(v.parentRequest ?? "").includes(suggestedPR) && !suggestionDismissed;
+    aiOn && !readOnly && !isCreate && !!suggestedPR && !(v.parentRequest ?? "").includes(suggestedPR) && !suggestionDismissed;
   function applyParentRequest(kind: "replace" | "append") {
     const el = parentRequestRef.current;
     if (!el || !suggestedPR) return;
@@ -520,10 +523,10 @@ export function ConsultationFullForm({
       {/* 녹음 바 — 생성·수정 공통. 저장 시 자동 전사·13섹션 AI 분석(입력값 보존).
           수정: 녹음은 여러 행으로 **누적**(0068a) — 여러 상담사가 각자 추가하고, 분석은 전체 합본으로 갱신. */}
       {/* 읽기 권한이면 녹음·파일 첨부째 없다(업로드 = 쓰기). */}
-      {readOnly ? null : (
+      {readOnly || !recordingOn ? null : (
       <details ref={recordingDetailsRef} className="border-line rounded-lg border px-3 py-2">
         <summary className="cursor-pointer text-sm font-bold">
-          상담 녹음·파일 첨부 <span className="ml-2 font-medium" aria-live="polite">{recordingActive ? recordingPaused ? "일시정지 · 열어서 이어서 녹음" : "녹음 중 · 열어서 일시정지·끝내기" : audioFile ? audioFile.name : existingRecordings.length > 0 ? `기존 녹음 ${existingRecordings.length}개 · 추가 가능` : "선택 · 저장 후 전사·AI 분석"}</span>
+          상담 녹음·파일 첨부 <span className="ml-2 font-medium" aria-live="polite">{recordingActive ? recordingPaused ? "일시정지 · 열어서 이어서 녹음" : "녹음 중 · 열어서 일시정지·끝내기" : audioFile ? audioFile.name : existingRecordings.length > 0 ? `기존 녹음 ${existingRecordings.length}개 · 추가 가능` : aiOn ? "선택 · 저장 후 전사·AI 분석" : "선택 · 저장 후 전사"}</span>
         </summary>
         <div className="mt-3 space-y-2.5">
         {!isCreate && existingRecordings.length > 0 ? (
@@ -545,17 +548,17 @@ export function ConsultationFullForm({
         />
         {/* 안내 — 흐린 11px 한 줄이라 잘 안 보이던 것 → 아이콘 + 핵심 강조 + 12px로 또렷하게. */}
         <div className="border-primary/20 bg-card/70 flex items-start gap-2 rounded-md border px-2.5 py-2">
-          <Sparkles className="text-primary mt-0.5 size-4 shrink-0" />
+          {aiOn ? <Sparkles className="text-primary mt-0.5 size-4 shrink-0" /> : <Mic className="text-primary mt-0.5 size-4 shrink-0" />}
           <p className="text-foreground text-xs leading-relaxed">
             {isCreate ? (
               <>
-                <span className="text-primary font-bold">저장하면 한국어 전사 + 13섹션 AI 분석이 자동 실행</span>
+                <span className="text-primary font-bold">{aiOn ? "저장하면 한국어 전사 + 13섹션 AI 분석이 자동 실행" : "저장하면 한국어 전사가 자동 실행"}</span>
                 됩니다. <span className="text-text-dim">입력하신 내용은 그대로 보존됩니다.</span>
               </>
             ) : (
               <>
                 <span className="text-primary font-bold">
-                  저장하면 이 녹음이 추가되고 전사 + AI 분석이 전체 녹음 기준으로 다시 실행
+                  {aiOn ? "저장하면 이 녹음이 추가되고 전사 + AI 분석이 전체 녹음 기준으로 다시 실행" : "저장하면 이 녹음이 추가되고 전체 녹음을 다시 전사"}
                 </span>
                 됩니다. 접수만 된 상담을 직접 상담하며 녹음하거나, 추가 상담을 이어 붙일 때 쓰세요.{" "}
                 <span className="text-text-dim">기존 녹음·입력하신 내용은 그대로 보존됩니다.</span>
@@ -920,17 +923,17 @@ export function ConsultationFullForm({
               <div className="space-y-3">
                 <L label="테스트 유형" icon={BookOpen}>
                   <select
-                    value={englishType}
+                    value={visibleEnglishType}
                     onChange={(e) => setField("english", "testType", e.target.value)}
                     className={`${input} max-w-xs`}
                     {...lockC}
                   >
-                    {ENGLISH_TEST_TYPES.map((t) => (
+                    {englishTestTypesFor(eieOn).map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
                 </L>
-                {[...(ENGLISH_GROUPS[englishType] ?? []), COMMON_FIELDS].map((g, i) => (
+                {[...englishGroupsFor(visibleEnglishType, eieOn), COMMON_FIELDS].map((g, i) => (
                   <GroupInputs key={i} group={g} subjectKey="english" details={details} onChange={setField} readOnly={readOnly} />
                 ))}
               </div>

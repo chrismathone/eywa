@@ -1,0 +1,21 @@
+import type { TenantSettings } from "@/features/owner/settings-types";
+import { isModuleEnabled } from "@/lib/modules";
+
+const APPROVAL_TYPES = ["approval_requested", "approval_decided", "approval_comment"] as const;
+const CLASSNOTE_TYPES = [
+  "classnote_parent_post",
+  "classnote_parent_comment",
+  "unsent_report",
+  "report_send_failed",
+  "notice_send_failed",
+] as const;
+
+/** 꺼진 기능에서 이미 쌓인 벨 알림도 기능의 흔적으로 남지 않게 한다. */
+export function hiddenNotificationTypes(settings: TenantSettings): string[] {
+  return [
+    ...(!isModuleEnabled(settings.modules.disabled, "approvals") ? APPROVAL_TYPES : []),
+    ...(!isModuleEnabled(settings.modules.disabled, "classnote") ? CLASSNOTE_TYPES : []),
+    ...(!isModuleEnabled(settings.modules.disabled, "makeedu") ? ["student_seat_limit_exceeded"] : []),
+    ...(!isModuleEnabled(settings.modules.disabled, "retention") ? ["grade_drop"] : []),
+  ];
+}

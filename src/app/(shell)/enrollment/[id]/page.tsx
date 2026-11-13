@@ -55,7 +55,7 @@ export const metadata = { title: "신입생 상담 상세 — 에이와" };
 
 /**
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다. 사전 브리프 생성은 `after()` 백그라운드로
- * DeepSeek v4-pro(추론형, 실측 ~70초)를 부르는데, 기본값(15초)이면 플랫폼이 중간에 죽여 상태가
+ * 심층 분석 모델(실측 ~70초)을 부르는데, 기본값(15초)이면 플랫폼이 중간에 죽여 상태가
  * 'generating'에 그대로 남는다 = 진행바 무한. 전사 웹훅(300)·크론(120) 선례와 같은 방식으로 올린다.
  */
 export const maxDuration = 300;
@@ -194,7 +194,7 @@ export default async function EnrollmentDetailPage({
         initialStatus={consult.processingStatus}
       />
 
-      <BackLink href="/enrollment" label="신규 콜&상담으로" />
+      <BackLink href="/enrollment?list=1" label="신규 콜&상담으로" />
 
       <header className="border-border flex flex-col gap-3 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1.5">

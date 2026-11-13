@@ -246,6 +246,38 @@ describe("저장본 읽기", () => {
     expect(conv.turns.map((t) => [t.key, t.status])).toEqual([["m:M1", "done"]]);
   });
 
+  it("이번 화면에서 받은 답 표시(live)는 흐름이 끊겨 저장본으로 되살려도 남는다 — 번호로 · 번호 전이면 같은 질문 글로(2026-11-12)", () => {
+    const withId = run(
+      initialAssistantState("new:0"),
+      { type: "ask/start", convKey: "new:0", turn: { ...turn("k1"), live: true } },
+      { type: "ask/event", turnKey: "k1", event: { type: "started", messageId: "M1" }, now: NOW },
+      { type: "ask/event", turnKey: "k1", event: { type: "thread", threadId: "T1", title: "t" }, now: NOW },
+      { type: "ask/end", turnKey: "k1" },
+      { type: "ask/broken", turnKey: "k1" },
+      { type: "conv/loaded", key: threadKey("T1"), detail: detail([message({ id: "M0", question: "앞 질문", report }), message({ id: "M1", report })]) },
+    );
+    expect(currentConversation(withId).turns.map((t) => [t.messageId, !!t.live])).toEqual([["M0", false], ["M1", true]]);
+    const noId = run(
+      initialAssistantState("new:0"),
+      { type: "ask/start", convKey: "new:0", turn: { ...turn("k1"), live: true } },
+      { type: "ask/event", turnKey: "k1", event: { type: "thread", threadId: "T1", title: "t" }, now: NOW },
+      { type: "ask/end", turnKey: "k1" },
+      { type: "ask/broken", turnKey: "k1" },
+      { type: "conv/loaded", key: threadKey("T1"), detail: detail([message({ id: "M1", report })]) },
+    );
+    expect(currentConversation(noId).turns.map((t) => !!t.live)).toEqual([true]);
+    // 이 화면이 이미 알던 줄(어제 답)에는 같은 글이어도 붙이지 않는다
+    const known = run(
+      initialAssistantState("new:0"),
+      { type: "conv/select", threadId: "T1" },
+      { type: "conv/loaded", key: threadKey("T1"), detail: detail([message({ id: "M1", report })]) },
+      { type: "ask/start", convKey: threadKey("T1"), turn: { ...turn("k1"), live: true } },
+      { type: "ask/end", turnKey: "k1" },
+      { type: "conv/loaded", key: threadKey("T1"), detail: detail([message({ id: "M1", report })]) },
+    );
+    expect(currentConversation(known).turns.map((t) => !!t.live)).toEqual([false]);
+  });
+
   it("🔴 답을 받는 중에 같은 대화를 다시 읽어도 진행 중 차례는 남는다(저장본의 '도는 중' 사본은 뺀다)", () => {
     const s = run(
       initialAssistantState("new:0"),

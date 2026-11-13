@@ -12,7 +12,8 @@ import { pickCnForRoster } from "@/features/onescreen/classnote-match";
 import { parseView } from "@/features/onescreen/view";
 import { OneScreenClient } from "@/features/onescreen/components/onescreen-client";
 import { TodayAttendanceStrip } from "@/features/attendance/live/components/today-strip";
-import { MyTasksStrip } from "@/features/staff-tasks/components/my-tasks-strip";
+import { MyDutiesStrip } from "@/features/duties/components/my-duties-strip";
+import { MyWorkRequestsStrip } from "@/features/work-requests/components/my-work-requests-strip";
 import { VideoHomeworkProvider } from "@/features/video-homework/components/video-homework-provider";
 import { getVideoHomeworkMarks } from "@/features/video-homework/server/queries";
 import { getOthersReportKeys, getVideoHomeworkAssignments } from "@/features/video-homework/server/assignments";
@@ -32,7 +33,7 @@ export const metadata = { title: "선생님 원스크린 — 에이와" };
  * ⚠️ 서버 액션은 **호출된 세그먼트의 maxDuration**을 따른다(등록상담 상세 선례). 기본값은 15초라
  * AI 호출 하나에도 빠듯하다 — 자동작성(`generateReportComment`)이 폴백을 타면 플랫폼이 중간에 죽여
  * **멘트가 또 템플릿으로 떨어진다**([[#118]]을 고쳐 놓고 같은 증상을 다시 만드는 셈).
- * 실측: Haiku 2~3초 · DeepSeek v4-flash 7.3초 · v4-pro는 86초였다(그래서 폴백을 flash로 되돌렸다).
+ * 실측: Haiku 2~3초 · 옛 폴백 빠른 모델 7.3초 · 추론 모델은 86초였다(그래서 화면 대기 기능은 빠른 모델로 고정했다).
  * 크레딧이 비면 **전건이 폴백 경로**로 오므로 여유를 크게 잡는다(상한일 뿐 과금은 실사용분).
  */
 export const maxDuration = 300;
@@ -183,9 +184,13 @@ export default async function OneScreenPage({
       <Suspense fallback={null}>
         <TodayAttendanceStrip className="mb-4" />
       </Suspense>
-      {/* 내 할 일(0377a) — 열린 할 일이 있을 때만 한 줄. 첫 페인트를 막지 않는다(B7). */}
+      {/* 오늘 내 업무(s2_0069 의무 장부) — 오늘 출결·보고서·발송 의무의 완료도. 의무가 있을 때만 · 첫 페인트를 막지 않는다(B7). */}
       <Suspense fallback={null}>
-        <MyTasksStrip className="mb-4" />
+        <MyDutiesStrip className="mb-4" />
+      </Suspense>
+      {/* 받은 업무 요청(관리자 '처리 요청' 등) — 받은 것이 있을 때만 선다 · 의무 줄과 따로(의무 없는 날 · 읽기 강사뷰에도) · 첫 페인트를 막지 않는다(B7). */}
+      <Suspense fallback={null}>
+        <MyWorkRequestsStrip className="mb-4" />
       </Suspense>
       {/* key=대상 날짜 — 날짜 이동(searchParam) 시 클라 상태를 새 날짜 로스터로 재초기화(useState는 최초 1회만). */}
       {/* key=대상 날짜 — 공급자는 검사 기록을 처음 한 번만 읽는다. 날짜를 옮겼는데 옛 날짜 기록이 남으면 일괄 검사가

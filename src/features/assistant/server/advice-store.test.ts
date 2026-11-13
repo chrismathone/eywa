@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown>;
+const M = ["master"] as const;
 const state: { current: Row | null; patches: Row[]; threadAlive: boolean } = { current: null, patches: [], threadAlive: true };
 
 function builder(table: string) {
@@ -50,7 +51,7 @@ describe("updateAdvice — 지운 대화", () => {
   it("대화를 지웠으면(다른 탭에서) 처리하지 않는다 — 까닭 '지운 대화'", async () => {
     state.current = { ...base, thread_id: "t1" };
     state.threadAlive = false;
-    expect(await updateAdvice(owner, "a1", { status: "adopted", statusAt: base.status_at })).toEqual({ ok: false, reason: "deleted" });
+    expect(await updateAdvice(owner, "a1", { status: "adopted", statusAt: base.status_at }, M)).toEqual({ ok: false, reason: "deleted" });
     expect(state.patches).toEqual([]);
   });
 });
@@ -58,22 +59,22 @@ describe("updateAdvice — 지운 대화", () => {
 describe("updateAdvice — 완료하면 재측정 기준일을 다시 잡는다", () => {
   it("완료한 날부터 · 다시 잴 날 = 그 날 + checkAfterDays + 2 · 이미 잰 결과는 비운다", async () => {
     state.current = { ...base, measure_state: "measured" };
-    const out = await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-20" });
+    const out = await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-20" }, M);
     expect(out.ok).toBe(true);
     expect(state.patches[0]).toMatchObject({ status: "done", done_on: "2026-11-20", measure_anchor: "2026-11-20", next_check_on: "2026-12-06", measure_state: "waiting", latest_verdict: null, fail_count: 0 });
   });
   it("질문일보다 이른 완료일이면 기준일이 그대로(질문일)라 다시 잡지 않는다 · 처리 전 ↔ 완료 왕복(같은 날)도 그대로", async () => {
     state.current = { ...base };
-    await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-01" });
+    await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-01" }, M);
     expect(state.patches[0]).not.toHaveProperty("measure_anchor");
     state.patches = [];
     state.current = { ...base, status: "open", measure_anchor: "2026-11-20" };
-    await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-20" });
+    await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-20" }, M);
     expect(state.patches[0]).not.toHaveProperty("measure_anchor");
   });
   it("이미 잰 결과가 완료일 뒤 기간이면 그 결과를 남긴다(평가를 남기려 완료를 눌러도)", async () => {
     state.current = { ...base, measure_state: "measured", latest_from: "2026-11-23" };
-    await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-20" });
+    await updateAdvice(owner, "a1", { status: "done", statusAt: base.status_at, doneOn: "2026-11-20" }, M);
     expect(state.patches[0]).not.toHaveProperty("measure_anchor");
     expect(state.patches[0]).not.toHaveProperty("latest_verdict");
   });
@@ -86,7 +87,7 @@ describe("updateAdvice — 완료하면 재측정 기준일을 다시 잡는다"
     ] as const) {
       state.current = current;
       state.patches = [];
-      await updateAdvice(owner, "a1", { statusAt: base.status_at, ...patch });
+      await updateAdvice(owner, "a1", { statusAt: base.status_at, ...patch }, M);
       expect(state.patches[0]).not.toHaveProperty("measure_anchor");
     }
   });

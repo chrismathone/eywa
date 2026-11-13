@@ -1,127 +1,169 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
-import { WindowLink } from "@/components/workspace/window-link";
+import { useState, type KeyboardEvent, type MouseEvent } from "react";
+import { yyMm, type ChurnMonth, type ChurnTeacherRow } from "@/features/withdrawals/teacher-churn";
 import {
-  deltaOf, deltaText, rateText, yyMm, type ChurnMonth, type ChurnTeacherRow,
-} from "@/features/withdrawals/teacher-churn";
-import { chartMonths, monthBrief, pointsOf, segmentsOf, tenureBand } from "@/features/withdrawals/teacher-churn-view";
-import { bandBg } from "./teacher-churn-table";
-import { churnTip } from "./teacher-churn-tip";
+  autoEmphasis, chartMonths, dupName, monthBrief, nearestAt, pointsOf, segmentsOf, spreadLabels,
+} from "@/features/withdrawals/teacher-churn-view";
+import { TeacherChurnChartList } from "./teacher-churn-chart-list";
+import { CONTEXT_COLOR, LINE_COLORS } from "./teacher-churn-colors";
 
-/** 같은 이름의 강사가 둘이면 뒤 사람에 번호(칸끼리 구별되게). */
-function nameOf(rows: readonly ChurnTeacherRow[], i: number): string {
-  const same = rows.slice(0, i).filter((r) => r.name === rows[i]!.name).length;
-  return same ? `${rows[i]!.name} (${same + 1})` : rows[i]!.name;
-}
+/** 강조 밖 강사를 가리킬 때의 선 색(강조 색과 겹치지 않게 앱 기본 남색). */
+const HOVER_COLOR = "var(--primary)";
+/** 마우스가 이만큼(px) 안에 들어온 선을 가리킨 것으로 본다. */
+const HIT_PX = 10;
+/** 선 끝 이름표 사이 최소 간격(세로 %) — 그림 영역 약 220px 기준 글자 한 줄(약 20px). */
+const LABEL_GAP = 9;
 
 /**
- * '강사별 퇴원율 추이' **차트 보기**(원장 2026-11-11 *"차트로 전환도 가능하게 표/차트"*) — 강사마다 작은 선 차트를 표와 같은 차례로
- * 나란히(Claude·Codex 협의: 한 판에 선 15~20개는 읽히지 않는다). 모든 칸이 같은 세로 눈금(`chartCeil` — 카드가 잰다)이라 높이로 견준다.
- * 점 = 마감한 퇴원율만(`pointsOf` — 표 칸과 같은 값) · 속 빈 점 = 담당 10명 미만 · 칸 바탕 = 입사 전 빗금 / 퇴사 뒤 회색(표와 같은 판정).
- * 칸 위 오른쪽 = 표 '증감' 열과 같은 두 달(`pair`)의 뒤 달 퇴원율과 증감.
+ * '강사별 퇴원율 추이' **차트 보기** — 모든 강사를 한 차트에(원장 2026-11-12 *"전체 선생님을 하나의 차트에 … 비교가능하게"*).
+ * 나머지 강사 = 옅은 회색 선 · 강조 셋 = 표에서 고른 강사(같은 색), 없으면 마지막 달 퇴원율 높은 3명(`autoEmphasis`) — 선 끝에 이름.
+ * 마우스 = 그 달 세로줄 + 가장 가까운 선을 진하게 · 누르면 그 강사를 고정(표와 같은 고르기 · 셋까지) · 빈 곳을 누르거나 좌우 화살표 = 달 고정.
+ * 오른쪽 목록 = 고른 달(없으면 마지막 달)의 모든 강사 값(표 칸과 같은 상태 이름). 점 = 마감한 퇴원율만 · 빈 달을 건너 잇지 않는다.
  */
-export function TeacherChurnChart({ rows, months, pair, ceil, portfolioLink }: {
+export function TeacherChurnChart({ rows, months, ceil, picked, onPick, onClearPicks, portfolioLink }: {
   rows: readonly ChurnTeacherRow[];
   months: readonly ChurnMonth[];
-  pair: readonly [string, string] | null;
-  /** 모든 칸 공통 세로 눈금 끝(%) — 카드가 `chartCeil`로 한 번 재서 범례와 함께 쓴다. */
+  /** 세로 눈금 끝(%) — 카드가 `chartCeil`로 재서 범례와 함께 쓴다. */
   ceil: number;
+  /** 고른 강사 id(고른 차례 = 색 차례) — 지금 보이는 강사만. */
+  picked: readonly string[];
+  onPick: (id: string) => void;
+  onClearPicks: () => void;
   portfolioLink: boolean;
 }) {
   const axis = chartMonths(months);
-  if (!axis.length) {
-    return <p className="bg-bg-soft rounded-lg px-4 py-3 text-sm" role="status">고른 기간에 마감한 달이 없습니다.</p>;
-  }
-  return (
-    <div className="-mx-1 max-h-[34rem] overflow-auto px-1">
-      <ul className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
-        {rows.map((r, i) => <Tile key={r.id} row={r} name={nameOf(rows, i)} axis={axis} pair={pair} ceil={ceil} portfolioLink={portfolioLink} />)}
-      </ul>
-    </div>
-  );
-}
-
-function Tile({ row: r, name, axis, pair, ceil, portfolioLink }: {
-  row: ChurnTeacherRow; name: string; axis: readonly ChurnMonth[]; pair: readonly [string, string] | null; ceil: number; portfolioLink: boolean;
-}) {
-  // 고른 달 — 탭·클릭·좌우 화살표로(마우스 오버 카드는 터치·키보드에 닿지 않는다). 없으면 칸 아래에 처음·끝 달.
-  // 달 글자 + 고를 때의 축으로 들고 있다 — 기간·필터가 바뀌어 축이 달라지면 고른 달은 풀린다(되돌려도 되살아나지 않게).
-  const axisKey = axis.map((m) => m.month).join(",");
-  const [pick, setPick] = useState<{ month: string; axisKey: string } | null>(null);
-  const setActiveMonth = (month: string | null) => setPick(month === null ? null : { month, axisKey });
   const n = axis.length;
-  const found = !pick || pick.axisKey !== axisKey ? -1 : axis.findIndex((m) => m.month === pick.month);
-  const active = found < 0 ? null : found;
+  // 고정한 달 — 달 글자 + 그때의 축으로 들고 있다(기간·필터가 바뀌면 풀린다 · 되돌려도 되살아나지 않게).
+  const axisKey = axis.map((m) => m.month).join(",");
+  const [sticky, setSticky] = useState<{ month: string; axisKey: string } | null>(null);
+  // 가리키는 중 — k = 차트 위 마우스의 달(목록 이름에 올리면 null) · id = 가리킨 강사.
+  const [hover, setHover] = useState<{ k: number | null; id: string | null; axisKey: string } | null>(null);
+  if (!n) return <p className="bg-bg-soft rounded-lg px-4 py-3 text-sm" role="status">고른 기간에 마감한 달이 없습니다.</p>;
+
+  const stickyK = sticky && sticky.axisKey === axisKey ? axis.findIndex((m) => m.month === sticky.month) : -1;
+  const live = hover && hover.axisKey === axisKey && (hover.k === null || hover.k < n) ? hover : null;
+  const hoverK = live?.k ?? null;
+  const activeK = hoverK !== null ? hoverK : stickyK >= 0 ? stickyK : n - 1;
+  const hoverId = live?.id ?? null;
+  const series = rows.map((r) => ({ row: r, pts: pointsOf(r, axis) }));
+  const names = new Map(rows.map((r, i) => [r.id, dupName(rows, i)]));
+  const emph = picked.length ? [...picked] : autoEmphasis(rows, axis[n - 1]!.month);
+  const colorOf = (id: string): string | null => { const i = emph.indexOf(id); return i < 0 ? null : LINE_COLORS[i] ?? null; };
   const xPct = (k: number) => ((k + 0.5) / n) * 100;
   const yPct = (rate: number) => 100 - (Math.min(rate, ceil) / ceil) * 100;
-  const cols = { gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` };
-  const pts = pointsOf(r, axis);
-  const last = pair ? r.cells[pair[1]] : undefined;
-  const lastOk = !!last && last.closed && last.state === "ok";
-  const d = deltaOf(r, pair);
+
+  const locate = (e: MouseEvent<HTMLDivElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const k = Math.min(n - 1, Math.max(0, Math.floor(((e.clientX - box.left) / box.width) * n)));
+    const target = (1 - (e.clientY - box.top) / box.height) * ceil;
+    const id = nearestAt(series.map((s) => ({ id: s.row.id, rate: s.pts[k]?.rate ?? null })), target, (HIT_PX / box.height) * ceil);
+    return { k, id };
+  };
+  const onMove = (e: MouseEvent<HTMLDivElement>) => {
+    const { k, id } = locate(e);
+    if (!live || hoverK !== k || live.id !== id) setHover({ k, id, axisKey });
+  };
+  const onClick = (e: MouseEvent<HTMLDivElement>) => {
+    const { k, id } = locate(e);
+    if (id) onPick(id);
+    else setSticky(stickyK === k ? null : { month: axis[k]!.month, axisKey });
+  };
   const onKey = (e: KeyboardEvent) => {
+    if (e.key === "Escape") { setSticky(null); return; }
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
     e.preventDefault();
-    const step = e.key === "ArrowLeft" ? -1 : 1;
-    setActiveMonth(axis[Math.min(n - 1, Math.max(0, active === null ? (step < 0 ? n - 1 : 0) : active + step))]!.month);
+    const base = stickyK >= 0 ? stickyK : n - 1;
+    setSticky({ month: axis[Math.min(n - 1, Math.max(0, base + (e.key === "ArrowLeft" ? -1 : 1)))]!.month, axisKey });
   };
-  const picked = active !== null ? axis[active] : undefined;
+
+  // 그리는 차례 = 회색 바탕 → 강조 → 가리킨 선(맨 위).
+  const rank = (id: string) => (id === hoverId ? 2 : colorOf(id) ? 1 : 0);
+  const order = [...series].sort((a, b) => rank(a.row.id) - rank(b.row.id));
+  const strokeOf = (id: string) => colorOf(id) ?? (id === hoverId ? HOVER_COLOR : CONTEXT_COLOR);
+  // 강조 밖 선은 강조가 있으면 더 옅게(원장 2026-11-12 *"선택하지 않은 강사들이 더 연해지게"*) · 가리키는 중이면 한 번 더.
+  const rest = emph.length ? 0.4 : 1;
+  const fade = (id: string) =>
+    id === hoverId ? 1 : colorOf(id) ? (hoverId ? 0.35 : 1) : hoverId ? rest * 0.6 : rest;
+  const marked = order.filter((s) => colorOf(s.row.id) || s.row.id === hoverId);
+  // 선 끝 이름표 — 강조·가리킨 선만 · 끝 달이 같은 이름표끼리 겹치지 않게 벌린다.
+  const ends = marked.flatMap((s) => {
+    const last = s.pts.findLastIndex((p) => p !== null);
+    return last < 0 ? [] : [{ id: s.row.id, last, y: yPct(s.pts[last]!.rate) }];
+  });
+  const labelY = new Map<string, number>();
+  for (const k of new Set(ends.map((e) => e.last))) {
+    for (const [id, y] of spreadLabels(ends.filter((e) => e.last === k), LABEL_GAP)) labelY.set(id, y);
+  }
+  const hoverRow = hoverId ? rows.find((r) => r.id === hoverId) : undefined;
+  const active = axis[activeK]!;
+  const everyOther = n > 12;
+  // 세로 눈금 — 5(20% 이하) 또는 10 간격 + 끝값(끝값은 늘 5의 배수라 소수점이 안 생긴다).
+  const step = ceil <= 20 ? 5 : 10;
+  const ticks = [...Array.from({ length: Math.floor(ceil / step) + 1 }, (_, i) => i * step).filter((v) => v < ceil), ceil];
+
   return (
-    <li className="border-line rounded-lg border p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-sm font-bold break-keep">
-            {name}
-            {portfolioLink ? (
-              <WindowLink href={`/class-review?tab=portfolio&teacher=${encodeURIComponent(r.id)}`} title={`${r.name} 직원 포트폴리오`}
-                className="hover:text-primary shrink-0 text-xs" ariaLabel={`${r.name} 직원 포트폴리오 열기`}>↗</WindowLink>
-            ) : null}
-          </p>
-          {r.subjects.length ? <p className="text-xs font-medium break-keep">{r.subjects.join(" · ")}</p> : null}
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem]">
+      <div className="min-w-0">
+        <div className="mb-1 flex min-h-6 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {picked.length ? (
+            <>
+              <span>강조 = 고른 강사 {picked.length}명(셋까지)</span>
+              <button type="button" onClick={onClearPicks} className="text-primary font-semibold hover:underline">고른 강사 지우기</button>
+            </>
+          ) : (
+            <span>{emph.length ? `강조 = ${yyMm(axis[n - 1]!.month)} 퇴원율 높은 ${emph.length}명 · ` : ""}선이나 이름을 누르면 그 강사를 강조합니다</span>
+          )}
+          <span aria-live="polite" className="num ml-auto font-semibold">
+            {hoverRow ? `${names.get(hoverRow.id)} · ${yyMm(active.month)} · ${monthBrief(hoverRow, active.month, hoverRow.cells[active.month])}` : ""}
+          </span>
         </div>
-        {/* 표 '증감' 열과 같은 판정 — 값 · 마감 전 · 비교 없음(—). */}
-        <div className="num shrink-0 text-right">
-          <p className="text-sm font-bold">{lastOk ? rateText(last!.rate!) : last && !last.closed ? <span className="text-xs font-medium">마감 전</span> : "—"}</p>
-          {d.kind === "value" ? <p className="text-xs">{deltaText(d.delta)}</p>
-            : d.kind === "open" && lastOk ? <p className="text-xs">마감 전</p>
-              : lastOk ? <p className="text-xs">—</p> : null}
-        </div>
-      </div>
-      <div tabIndex={0} role="group" aria-label={`${name} 달별 퇴원율 — 좌우 화살표로 달을 고릅니다`} onKeyDown={onKey}
-        className="focus-visible:outline-primary relative mt-2 h-20 rounded-sm focus-visible:outline-2">
-        {/* 재직 밖 바탕 — 표 칸 색과 같은 판정·같은 색 · 고른 달은 옅게 표시. */}
-        <div aria-hidden className="absolute inset-0 grid" style={cols}>
-          {axis.map((m, k) => (
-            <span key={m.month} className={k === active ? "bg-primary-softer" : undefined} style={k === active ? undefined : bandBg(tenureBand(r, m.month))} />
-          ))}
-        </div>
-        <div aria-hidden className="text-primary absolute inset-x-0 inset-y-2">
-          <span className="border-line absolute inset-x-0 top-0 border-t border-dashed" />
-          <span className="border-line absolute inset-x-0 bottom-0 border-b" />
-          <svg className="absolute inset-0 size-full overflow-visible" viewBox={`0 0 ${n} 100`} preserveAspectRatio="none">
-            {segmentsOf(pts).filter((s) => s.length > 1).map((s) => (
-              <polyline key={s[0]} fill="none" stroke="currentColor" strokeWidth={2} vectorEffect="non-scaling-stroke"
-                strokeLinejoin="round" strokeLinecap="round" points={s.map((k) => `${k + 0.5},${yPct(pts[k]!.rate)}`).join(" ")} />
+        <div className="relative h-64">
+          <div className="absolute top-2 right-24 bottom-7 left-10">
+            {ticks.map((v) => (
+              <div key={v} aria-hidden className={`absolute inset-x-0 border-t ${v ? "border-line-faint border-dashed" : "border-line"}`} style={{ top: `${yPct(v)}%` }}>
+                <span className="num absolute right-full -translate-y-1/2 pr-1.5 text-xs whitespace-nowrap">{v}%</span>
+              </div>
             ))}
-          </svg>
-          {pts.map((p, k) => p ? (
-            <span key={axis[k]!.month} style={{ left: `${xPct(k)}%`, top: `${yPct(p.rate)}%` }}
-              className={`absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-current ${p.small ? "bg-card" : "bg-current"}`} />
-          ) : null)}
-        </div>
-        {/* 마우스 오버 = 그 달 칸 전체(작은 점을 겨누지 않게 · 카드 문구는 표 칸과 같다) · 누르면 그 달을 아래에 글로. */}
-        <div aria-hidden className="absolute inset-0 grid" style={cols}>
-          {axis.map((m, k) => <span key={m.month} onClick={() => setActiveMonth(k === active ? null : m.month)} {...churnTip(r, m, r.cells[m.month])} />)}
+            {/* 달마다 연한 세로 점선(원장 2026-11-12 *"각 월별 세로 점선 연하게"*) — 같은 달 값을 위아래로 짚기 쉽게. */}
+            {axis.map((m, k) => (
+              <span key={m.month} aria-hidden className="border-line-faint absolute inset-y-0 border-l border-dashed" style={{ left: `${xPct(k)}%` }} />
+            ))}
+            {hoverK !== null || stickyK >= 0 ? (
+              <span aria-hidden className="bg-primary-softer absolute inset-y-0" style={{ left: `${(activeK / n) * 100}%`, width: `${100 / n}%` }} />
+            ) : null}
+            <svg aria-hidden className="absolute inset-0 size-full overflow-visible" viewBox={`0 0 ${n} 100`} preserveAspectRatio="none">
+              {order.map((s) => segmentsOf(s.pts).filter((g) => g.length > 1).map((g) => (
+                <polyline key={`${s.row.id}:${g[0]}`} fill="none" stroke={strokeOf(s.row.id)} opacity={fade(s.row.id)}
+                  strokeWidth={s.row.id === hoverId ? 3 : colorOf(s.row.id) ? 2.25 : 1.5} vectorEffect="non-scaling-stroke"
+                  strokeLinejoin="round" strokeLinecap="round" points={g.map((k) => `${k + 0.5},${yPct(s.pts[k]!.rate)}`).join(" ")} />
+              )))}
+            </svg>
+            {marked.map((s) => s.pts.map((p, k) => p ? (
+              <span key={`${s.row.id}:${k}`} aria-hidden style={{ left: `${xPct(k)}%`, top: `${yPct(p.rate)}%`, borderColor: strokeOf(s.row.id), background: p.small ? "var(--card)" : strokeOf(s.row.id), opacity: fade(s.row.id) }}
+                className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2" />
+            ) : null))}
+            {ends.map((e) => (
+              <span key={e.id} aria-hidden style={{ left: `calc(${xPct(e.last)}% + 0.6rem)`, top: `${labelY.get(e.id) ?? e.y}%`, opacity: fade(e.id) }}
+                className="bg-card/85 absolute flex -translate-y-1/2 items-center gap-1 rounded-sm px-0.5 text-xs font-semibold whitespace-nowrap">
+                <i className="h-0.5 w-2.5 rounded-full" style={{ background: strokeOf(e.id) }} />{names.get(e.id)}
+              </span>
+            ))}
+            {/* 마우스·탭 = 그 달 + 가장 가까운 선 · 누르기 = 고정(선 위면 강사, 빈 곳이면 달) · 키보드 = 좌우 화살표로 달. */}
+            <div tabIndex={0} role="group" onMouseMove={onMove} onMouseLeave={() => setHover(null)} onClick={onClick} onKeyDown={onKey}
+              aria-label="강사별 퇴원율 차트 — 좌우 화살표로 달을 고르면 옆 목록이 그 달 값으로 바뀝니다"
+              className={`focus-visible:outline-primary absolute inset-0 rounded-sm focus-visible:outline-2 ${hoverId ? "cursor-pointer" : ""}`} />
+            <div aria-hidden className="absolute inset-x-0 top-full mt-1.5">
+              {axis.map((m, k) => everyOther && k % 2 !== (n - 1) % 2 && k !== activeK ? null : (
+                <span key={m.month} style={{ left: `${xPct(k)}%` }}
+                  className={`num absolute -translate-x-1/2 text-xs whitespace-nowrap ${k === activeK ? "font-bold" : ""}`}>{yyMm(m.month)}</span>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
-      <p aria-live="polite" className="num text-text-faint mt-1 flex justify-between gap-2 text-xs">
-        {picked ? (
-          <span className="text-foreground">{yyMm(picked.month)} · {monthBrief(r, picked.month, r.cells[picked.month])}</span>
-        ) : (
-          <><span>{yyMm(axis[0]!.month)}</span><span>{n > 1 ? yyMm(axis.at(-1)!.month) : ""}</span></>
-        )}
-      </p>
-    </li>
+      <TeacherChurnChartList rows={rows} month={active} names={names} colorOf={colorOf} picked={picked} hoverId={hoverId}
+        onHover={(id) => setHover(id ? { k: null, id, axisKey } : null)} onPick={onPick} portfolioLink={portfolioLink} />
+    </div>
   );
 }

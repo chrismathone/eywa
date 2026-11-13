@@ -29,7 +29,7 @@ describe("경로 ① 원스크린 저장(saveLessonReport)", () => {
     expect(fin).toBeGreaterThan(upsert);
     expect(fn.slice(fin, fin + 900)).toMatch(/if \(!fin\.ok\)\s*return \{\s*ok: false/);
     // '보낼 반'은 앵커의 복사본 — 게시된 행은 다시 적지 않는다(회수가 옛 기록을 본다)
-    expect(fn).toContain("...(isMakeupRow && makeupAnchor && !priorRow?.classnote_sent_at ? { classnote_class_id: makeupAnchor } : {}),");
+    expect(fn).toContain("!priorRow?.classnote_sent_at ? { classnote_class_id: makeupDeliveryOnSave(");
   });
   it("🔴 발송은 보강 반으로만 — 따로 고른 '보낼 반'을 적는 길이 없다(C1·C9)", () => {
     const fn = ONESCREEN.slice(ONESCREEN.indexOf("export async function saveAndQueueClassnote"));
@@ -48,12 +48,14 @@ describe("경로 ② 보강 반 바꾸기(setMakeupClass · 발송 다이얼로�
     const fn = SYNC.slice(SYNC.indexOf("export async function changeMakeupAnchor"));
     expect(fn).toContain(".update({ makeup_class_id: input.toClassId, classnote_class_id: input.toClassId })");
     expect(fn).toContain('.is("classnote_sent_at", null)');
-    expect(fn).toContain(".update({ makeup_class_id: r.makeupClassId, classnote_class_id: r.makeupClassId })");
+    expect(fn).toContain(".update({ makeup_class_id: r.makeupClassId, classnote_class_id: r.deliveryClassId ?? r.makeupClassId })");
     // 막힐 일(칸 이동 계획)은 보고서를 바꾸기 **전에** 본다
     expect(fn.indexOf("planReportAnchorMove(")).toBeLessThan(fn.indexOf(".update({ makeup_class_id: input.toClassId"));
   });
-  it("발송 다이얼로그에서 고른 반은 보강 반으로 실어 다시 저장한다(보낼 반만 적지 않는다)", () => {
-    expect(CLIENT).toContain("saveAndQueueClassnote({ ...built.input, makeupClassId: picked })");
+  it("기존 보강의 전달 반 선택은 출결 반을 바꾸지 않고, 반 미정일 때만 보강 반을 정한다", () => {
+    expect(CLIENT).toContain("deliveryClassId: picked");
+    expect(CLIENT).toContain("makeupClassId: picked");
+    expect(CLIENT).toContain("if (!deliveryOnly &&");
     expect(CLIENT).not.toContain("classnoteClassId: picked");
     expect(CLIENT).toContain("await setMakeupClass({ studentId: student.id, date: activeDate, subject: subjectKey, classId: picked })");
   });

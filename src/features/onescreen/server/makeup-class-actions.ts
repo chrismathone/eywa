@@ -54,7 +54,7 @@ export async function setMakeupClass(input: {
   // 그날 그 학생의 반 없는 보강 보고서(과목 단위) — 옛 행은 subject가 NULL일 수 있어 JS로 맞춘다(보강 빼기와 같은 규약).
   const { data: rows, error } = await admin
     .from("lesson_reports")
-    .select("id, subject, makeup_class_id, classnote_status, classnote_sent_at, created_by, teacher_name")
+    .select("id, subject, makeup_class_id, classnote_class_id, classnote_status, classnote_sent_at, created_by, teacher_name")
     .eq("tenant_id", user.tenantId)
     .eq("student_id", input.studentId)
     .eq("report_date", input.date)
@@ -94,6 +94,7 @@ export async function setMakeupClass(input: {
         reportDate: input.date,
         subject: (report.subject as string | null) ?? null,
         makeupClassId: from,
+        deliveryClassId: (report.classnote_class_id as string | null) ?? null,
         classnoteStatus: (report.classnote_status as string | null) ?? null,
         classnoteSentAt: (report.classnote_sent_at as string | null) ?? null,
         ownerId: (report.created_by as string | null) ?? null,

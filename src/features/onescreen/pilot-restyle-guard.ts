@@ -15,6 +15,7 @@
  */
 import { PILOT_SECTION_TITLES, progressFacts } from "./math-report-pilot";
 import { isScoreLine } from "./pilot-notes";
+import { hasMentLeak } from "./ment-leak";
 
 export const RESTYLE_TITLES: readonly string[] = [
   PILOT_SECTION_TITLES.progress,
@@ -75,6 +76,9 @@ export function acceptRestyle(original: string, rewrite: string, mustKeep: reado
   if (!o) return !r;
   if (!r) return false;
   if (r.includes("■") || r.includes("○○")) return false;
+  // 혼잣말·지시 되받기·글자 그대로의 줄바꿈 기호 — 그 항목은 코드 글 그대로(원장 2026-11-12, `ment-leak.ts`).
+  if (/\\[nrt]/.test(r)) return false;
+  if (r.split(/(?<=[.!?])\s+|\n/).some((sen) => hasMentLeak(sen)) && !o.split(/(?<=[.!?])\s+|\n/).some((sen) => hasMentLeak(sen))) return false;
   const oLen = squash(o).length;
   const rLen = squash(r).length;
   if (rLen < oLen * 0.4 || rLen > oLen * 2.5) return false;

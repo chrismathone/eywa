@@ -19,6 +19,7 @@ import { IMPORT_META } from "../kinds";
 import { duplicateKeyIssues, type ColumnSpec, type ImportPreviewRow, type SheetSpec } from "../spec";
 import type { ImporterDef } from "../server/types";
 import { explainDbError } from "@/lib/supabase/db-error";
+import { phoneLabel } from "@/lib/format/phone";
 
 /**
  * 원생 가져오기 — 옛 '학생 엑셀 일괄등록'(7칸 · 추가만)을 대신한다. 체크리스트 4번 "원생 명단"의 칸 전부.
@@ -131,8 +132,8 @@ const def: ImporterDef<Plan> = {
         rows: rows.map((s) => ({
           code: s.student_code ?? "", name: s.name, englishName: s.english_name ?? "", school: s.school ?? "", grade: s.grade ?? "",
           gender: s.gender === "male" ? "남" : s.gender === "female" ? "여" : "", birthDate: s.birth_date ?? "",
-          status: STUDENT_STATUS_LABEL[s.status] ?? "", studentPhone: s.student_phone ?? "", parentName: s.parent_name ?? "",
-          parentRelation: s.parent_relation ?? "", parentPhone: s.parent_phone ?? "", address: s.address ?? "", email: s.email ?? "",
+          status: STUDENT_STATUS_LABEL[s.status] ?? "", studentPhone: phoneLabel(s.student_phone) ?? "", parentName: s.parent_name ?? "",
+          parentRelation: s.parent_relation ?? "", parentPhone: phoneLabel(s.parent_phone) ?? "", address: s.address ?? "", email: s.email ?? "",
           enrolledAt: s.enrolled_at?.slice(0, 10) ?? "", withdrawnAt: s.withdrawn_at?.slice(0, 10) ?? "", notes: s.notes ?? "",
         })),
       },

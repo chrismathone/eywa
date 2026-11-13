@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLocalWorkerLock, decideWorkerLease, localWorkerLockAddress } from "./worker-lease.mjs";
 import { createExecutionLease } from "./worker-execution-lease.mjs";
 
+// OS 잠금은 Windows(이름 있는 파이프)·Linux(추상 소켓)만 지원한다 — 그 밖의 OS에서는 일부러 잠금을 거절한다(worker-lease.mjs).
+const OS_LOCK = process.platform === "win32" || process.platform === "linux";
 const locks = [];
 const leases = [];
 const local = (scope = `test:${randomUUID()}`, options) => { const lock = createLocalWorkerLock(scope, options); locks.push(lock); return lock; };
@@ -25,13 +27,13 @@ afterEach(async () => {
 });
 
 describe("운영체제 단일 실행 잠금", () => {
-  it("24개 동시 시작 중 하나만 잠금을 갖는다", async () => {
+  it.skipIf(!OS_LOCK)("24개 동시 시작 중 하나만 잠금을 갖는다", async () => {
     const scope = `race:${randomUUID()}`;
     const contenders = Array.from({ length: 24 }, () => local(scope));
     expect((await Promise.all(contenders.map((lock) => lock.acquire()))).filter(Boolean)).toHaveLength(1);
     expect(contenders.filter((lock) => lock.held)).toHaveLength(1);
   });
-  it("동일 소유자의 중복 호출은 유지하고 종료 후 다른 소유자가 이어받는다", async () => {
+  it.skipIf(!OS_LOCK)("동일 소유자의 중복 호출은 유지하고 종료 후 다른 소유자가 이어받는다", async () => {
     const scope = `release:${randomUUID()}`, a = local(scope), b = local(scope);
     expect(await a.acquire()).toBe(true);
     expect(await a.acquire()).toBe(true);
@@ -50,11 +52,11 @@ describe("운영체제 단일 실행 잠금", () => {
     expect(await local("unsupported", { platform: "unsupported" }).acquire()).toBe(false);
     expect(() => localWorkerLockAddress("")).toThrow();
   });
-  it("서로 다른 지점은 독립적으로 실행한다", async () => {
+  it.skipIf(!OS_LOCK)("서로 다른 지점은 독립적으로 실행한다", async () => {
     expect(await local().acquire()).toBe(true);
     expect(await local().acquire()).toBe(true);
   });
-  it("실제 자식 프로세스 강제 종료 후 잠금이 해제된다", async () => {
+  it.skipIf(!OS_LOCK)("실제 자식 프로세스 강제 종료 후 잠금이 해제된다", async () => {
     const scope = `crash:${randomUUID()}`;
     const moduleUrl = pathToFileURL(path.resolve("scripts/_classnote/worker-lease.mjs")).href;
     const child = spawn(process.execPath, ["--input-type=module", "-e",

@@ -24,7 +24,10 @@ export function ModulesSection({ initial, readOnly = false }: { initial: Modules
       return next;
     });
   // 저장은 끈 것만, 정의 순서대로(비교·감사로그가 흔들리지 않게).
-  const payload: ModulesSettings = { disabled: MODULE_IDS.filter((id) => disabled.has(id)) };
+  const payload: ModulesSettings = {
+    disabled: MODULE_IDS.filter((id) => disabled.has(id)),
+    known: [...MODULE_IDS],
+  };
   const onCount = MODULE_IDS.length - payload.disabled.length;
 
   return (

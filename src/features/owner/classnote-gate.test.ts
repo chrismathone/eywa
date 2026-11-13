@@ -41,7 +41,7 @@ describe("꺼진 기능 가드", () => {
     const core = readFileSync(path.join(ROOT, "scripts/_classnote/classnote-core.mjs"), "utf8");
     const send = core.slice(core.indexOf("export async function isClassnoteSendEnabled"));
     expect(send.slice(0, send.indexOf("\n}\n"))).toMatch(/isClassnoteModuleEnabled\(sql, tenant\)/);
-    expect(core).toMatch(/modules'->'disabled'\) \? 'classnote'/);
+    expect(core).toMatch(/isRawModuleEnabled\(row, "classnote"\)/);
     const watch = readFileSync(path.join(ROOT, "scripts/_classnote/watch-classnote-queue.mjs"), "utf8");
     expect(watch).toMatch(/if \(!\(await isClassnoteModuleEnabled\(db\(\), tenant\)\)\)/);
   });
@@ -63,5 +63,24 @@ describe("꺼진 기능 가드", () => {
     expect(read("src/features/integrations/server/makeedu-sync.ts")).toMatch(/"makeedu"/);
     expect(read("src/app/api/cron/sheets-sync/route.ts")).toMatch(/"sheet_sync"/);
     expect(read("src/features/newcomers/server/consult-link.ts")).toMatch(/"newcomers"/);
+  });
+
+  it("업무 완성도와 운영실은 실제 발송만 발송 의무·발송 줄로 세고, 영어 직접 작성 집계는 모듈 판정을 유지한다", () => {
+    const read = (p: string) => readFileSync(path.join(ROOT, p), "utf8");
+    const sync = read("src/features/duties/server/sync.ts");
+    expect(sync).toContain("const classnoteSending = classnoteSendOn(settings)");
+    expect(sync).toContain("classnoteSendOn: classnoteSending");
+    expect(sync).toMatch(/void_reason: "send_disabled"[\s\S]*?\.eq\("kind", "report_send"\)[\s\S]*?\.eq\("status", "open"\)/);
+    const work = read("src/features/dashboard/overview/teacher-work-server.ts");
+    expect(work).toContain("const deliveryShown = classnoteSendOn(settings)");
+    expect(work).toMatch(/english && classnoteModuleOn\(settings\) \? "classnote"/);
+  });
+
+  it("멈춘 발송 복구도 재발송·최초 발송과 같은 발송 판정을 행을 읽기 전에 지난다(꺼진 지점에서 큐로 되돌리지 않는다)", () => {
+    const actions = readFileSync(path.join(ROOT, "src/features/report-admin/server/actions.ts"), "utf8");
+    const fn = actions.slice(actions.indexOf("export async function resetStuckClassnote"));
+    const gate = fn.indexOf("if (!classnoteSendOn(settings)) return { ok: true, reset: 0, noClass: 0 };");
+    expect(gate).toBeGreaterThan(-1);
+    expect(gate).toBeLessThan(fn.indexOf('.eq("classnote_status", "processing")'));
   });
 }, 60_000);

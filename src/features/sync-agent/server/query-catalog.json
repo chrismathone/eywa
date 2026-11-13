@@ -429,6 +429,26 @@
       "bucket"
     ]
   },
+  "0e134250a218581ffcfe19d0d8487551d6e97e25febaccbf3ab02796f57d614f": {
+    "parts": [
+      "\n    select count(*)::int as enrolled from students where tenant_id = ",
+      " and status = 'enrolled'"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/seat-limit-alert.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId"
+    ]
+  },
   "0e1ea113c78a3d36b7ff63d4647351abe8782eed8e898d960fcfe784033d41fd": {
     "parts": [
       "select name, classnote_name, grade, parent_phone, student_phone, home_phone, other_phone\n      from students where id=",
@@ -1816,6 +1836,26 @@
     ],
     "sources": [
       "scripts/_makeedu/sync-consultations-incremental.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId"
+    ]
+  },
+  "2c8eee818d38e8957fd2d5b59104185164351608a2f9eb23b7da677a8b056b79": {
+    "parts": [
+      "\n    select max_seats from tenant_licenses\n    where tenant_id = ",
+      " and feature = 'student_seats' and is_active = true and max_seats is not null"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/seat-limit-alert.cjs"
     ],
     "parameters": [
       {
@@ -3978,6 +4018,26 @@
       "tenant"
     ]
   },
+  "703ae7f418e5fd0887e46555e73fddf670c580a07317466e62d5f30832ce64e8": {
+    "parts": [
+      "\n    select jsonb_build_object('preset', data->'preset', 'modules', data->'modules') as module_settings\n    from tenant_settings where tenant_id = ",
+      ""
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/lib.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId"
+    ]
+  },
   "70b5c5a44b7883ff726c735115044f96c23fc3e8f3620ef872d213af58db0504": {
     "parts": [
       "select student_id from classnote_child_links where tenant_id = ",
@@ -5382,6 +5442,61 @@
       "tenant",
       "today",
       "today"
+    ]
+  },
+  "8be14486500ed467dd444a24dfdf8d57f8a9ff4716a95e35f9698ea25f559860": {
+    "parts": [
+      "select 1 as ok from classes c\n    where c.tenant_id = ",
+      " and c.id = ",
+      " and c.subject = ",
+      "\n      and (c.closed_at is null or c.closed_at::date >= ",
+      "::date)\n      and exists (select 1 from enrollments e where e.tenant_id = c.tenant_id and e.class_id = c.id\n        and e.student_id = ",
+      " and not coalesce(e.on_hold, false)\n        and (e.start_date is null or e.start_date <= ",
+      "::date)\n        and (e.end_date is null or e.end_date > ",
+      "::date\n          or (e.end_date = ",
+      "::date and not coalesce(e.is_transferred, false))))\n    limit 1"
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-class-route.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant",
+      "classId",
+      "report.subject",
+      "report.report_date",
+      "report.student_id",
+      "report.report_date",
+      "report.report_date",
+      "report.report_date"
     ]
   },
   "8bf1ba572acf39a284231b48df34638be01ed2c4befe6dbf3cf567a93b367a4f": {
@@ -9253,6 +9368,81 @@
     "expressions": [
       "tenant",
       "classId"
+    ]
+  },
+  "df430310205add520939a50f5f4457cce4c313890fc21125a47bb61f1649735a": {
+    "parts": [
+      "\n    with recipients as (\n      select id from users where tenant_id = ",
+      " and system_role = 'master' and status = 'active'\n    ), fresh as (\n      insert into notification_events (tenant_id, event_type, subject_key, bucket, seeded)\n      select ",
+      ", ",
+      ", 'makeedu_student_import', ",
+      ", false\n      where exists (select 1 from recipients)\n      on conflict (tenant_id, event_type, subject_key, bucket) do nothing returning id\n    )\n    insert into notifications (tenant_id, recipient_id, type, title, body, link)\n    select ",
+      ", recipients.id, ",
+      ", ",
+      ", ",
+      ", '/students'\n    from recipients cross join fresh returning id"
+    ],
+    "modules": [
+      "makeedu"
+    ],
+    "sources": [
+      "scripts/_makeedu/seat-limit-alert.cjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      },
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenantId",
+      "tenantId",
+      "EVENT_TYPE",
+      "`${maxSeats}:${enrolled}`",
+      "tenantId",
+      "EVENT_TYPE",
+      "text.title",
+      "text.body"
+    ]
+  },
+  "e217242cff15b71cebec5621d52737d814f43e451b78095edb2efbcccc2cab5d": {
+    "parts": [
+      "select data->'preset' as preset, data->'modules' as modules\n    from tenant_settings where tenant_id=",
+      ""
+    ],
+    "modules": [
+      "classnote"
+    ],
+    "sources": [
+      "scripts/_classnote/classnote-core.mjs"
+    ],
+    "parameters": [
+      {
+        "kind": "value"
+      }
+    ],
+    "expressions": [
+      "tenant"
     ]
   },
   "e3ee7cdb5744e1599482b9edbf0ef643e7500ecbba2ac4da00ec872529f952ef": {

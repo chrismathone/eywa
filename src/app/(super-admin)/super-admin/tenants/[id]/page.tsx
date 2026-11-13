@@ -139,7 +139,6 @@ export default async function TenantDetailPage({
         <div className="space-y-5 lg:max-w-3xl">
           <LicenseSection
             tenantId={detail.id}
-            tenantName={detail.name}
             licenses={licenses}
             enrolledCount={detail.studentCount}
           />

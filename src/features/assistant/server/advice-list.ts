@@ -10,17 +10,19 @@ import { fetchAllPaged } from "@/lib/supabase/batch";
 import { ADVICE_VIEW_COLUMNS, adviceViewOf, type AdviceRow } from "../advice";
 import type { AdviceListItem } from "../advice-list";
 import { ADVICE } from "./advice-store";
-import { THREADS, type Owner } from "./store";
+import { covers } from "../scope";
+import { THREADS, type Owner, type ViewerScope } from "./store";
 
-type ListRow = AdviceRow & { thread_id: string; action: string; why: string; created_at: string };
+type ListRow = AdviceRow & { thread_id: string; action: string; why: string; created_at: string; scope_keys: string[] | null };
 
-export async function listAdvice(owner: Owner): Promise<AdviceListItem[]> {
+/** `scope` = 지금 권한 범위 — 덮지 못하는 의견(권한이 줄었다 · 표지 없는 옛 의견은 원장만)은 목록에서 뺀다(Codex 합의 9). */
+export async function listAdvice(owner: Owner, scope: ViewerScope): Promise<AdviceListItem[]> {
   const db = createAdminClient();
   const [rows, threads] = await Promise.all([
     fetchAllPaged<ListRow>((from, to) =>
       db
         .from(ADVICE)
-        .select(`${ADVICE_VIEW_COLUMNS}, thread_id, action, why, created_at`)
+        .select(`${ADVICE_VIEW_COLUMNS}, thread_id, action, why, created_at, scope_keys`)
         .eq("tenant_id", owner.tenantId)
         .eq("asked_by", owner.userId)
         .order("id")
@@ -41,7 +43,7 @@ export async function listAdvice(owner: Owner): Promise<AdviceListItem[]> {
   ]);
   const titles = new Map(threads.map((t) => [t.id, t.title?.trim() || "제목 없는 대화"]));
   return rows
-    .filter((r) => titles.has(r.thread_id))
+    .filter((r) => titles.has(r.thread_id) && covers(scope, r.scope_keys))
     .map((r) => ({
       view: adviceViewOf(r),
       action: r.action,

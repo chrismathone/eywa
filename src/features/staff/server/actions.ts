@@ -32,6 +32,7 @@ import { isLoginEmailTakenElsewhere } from "./login-email-taken";
 import { getActiveAssistSlotClasses } from "./queries";
 import { setStaffLoginBlocked } from "./auth-ban";
 import { cleanupPersonSettings } from "@/features/owner/server/retired-people";
+import { phoneLabel } from "@/lib/format/phone";
 
 /** 직원 저장의 DB 오류 → 이유(+이메일 중복이면 그 칸) + 로그([[#138]]). 보호 트리거(42501·P0001)의 한글 이유는 그대로 보인다. */
 function staffSaveError(error: unknown, scope: string): StaffFormState {
@@ -61,7 +62,7 @@ function readBaseForm(formData: FormData) {
   return {
     displayName: get("displayName"),
     email: get("email"),
-    phone: get("phone") || null,
+    phone: phoneLabel(get("phone")),
     hireDate: get("hireDate") || null,
     jobTitle: get("jobTitle") || null,
     // 영어 닉네임 — 비우면 null(이름을 그대로 쓴다). 영어 시간표 임포트가 시트 라벨을 강사에 붙이는 키.
@@ -77,6 +78,8 @@ function readBaseForm(formData: FormData) {
     seatJjDuty: get("seatJjDuty") === "on",
     // 셔틀 담당(0227a) — 역할을 안 올리고 셔틀 등하원만 여는 개인 토글.
     shuttleDuty: get("shuttleDuty") === "on",
+    // 원어민 선생님(s2_0094) — 칸은 담당 과목에 영어가 있을 때만 보인다(칸이 없으면 미체크 = 꺼짐으로 저장 — 영어를 빼면 꺼진다).
+    nativeTeacher: get("nativeTeacher") === "on",
     deskAttendanceOptin: get("deskAttendanceOptin") === "on",
     // '강사뷰 접근'(0224a) — 체크박스는 폼에 master(+super_admin)에게만 노출되고, 저장도 그 자격일 때만
     // 컬럼을 건드린다(아래 canGrantTeacherView 스프레드). 아니면 미체크=off로 남의 부여를 지우게 된다.
@@ -197,6 +200,9 @@ export async function createStaff(
     seat_lab_duty: input.seatLabDuty,
     seat_jj_duty: input.seatJjDuty,
     desk_attendance_optin: input.deskAttendanceOptin,
+    // 표식 칸이 있는 폼(근무 설정)에서만 — 다른 경로의 저장이 이 값을 지우지 않게.
+    // 🔴 원장(+운영자)만(s2_0095 DB 가드와 같은 자격 — 다른 사람이 실으면 저장 전체가 거절된다).
+    ...(canGrantTeacherView && formData.has("nativeTeacherField") ? { native_teacher: input.nativeTeacher } : {}),
     ...(canGrantTeacherView && formData.has("teacherViewAccess") ? { teacher_view_access: input.teacherViewAccess } : {}),
     // 🔴 강사 화면 기본 언어(0248a)는 **생성 시 안 싣는다** — 신규 직원은 '지정 없음'(null)으로 태어나고
     //    (이름에서 도출), 지정은 근무 설정에서 사람이 명시로 켠다. 여기서 실으면 0248a 미적용 창에서
@@ -213,7 +219,7 @@ export async function createStaff(
       .eq("id", authData.user.id));
   }
 
-  if (dbErr && /seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access/i.test(dbErr.message)) {
+  if (dbErr && /seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access|native_teacher/i.test(dbErr.message)) {
     // 0209a/0212a/0224a/0227a 미적용 — 선택 토글만 빼고 나머지를 저장한다(#95, 직원 등록을 죽이지 않음).
     const { error: retryErr } = await admin.from("users").update(staffPatch).eq("id", authData.user.id);
     if (retryErr) {
@@ -398,6 +404,9 @@ export async function updateStaff(
     seat_lab_duty: input.seatLabDuty,
     seat_jj_duty: input.seatJjDuty,
     desk_attendance_optin: input.deskAttendanceOptin,
+    // 표식 칸이 있는 폼(근무 설정)에서만 — 다른 경로의 저장이 이 값을 지우지 않게.
+    // 🔴 원장(+운영자)만(s2_0095 DB 가드와 같은 자격 — 다른 사람이 실으면 저장 전체가 거절된다).
+    ...(canGrantTeacherView && formData.has("nativeTeacherField") ? { native_teacher: input.nativeTeacher } : {}),
     ...(canGrantTeacherView && formData.has("teacherViewAccess") ? { teacher_view_access: input.teacherViewAccess } : {}),
     // 🔴 **폼에 칸이 있고 컬럼도 있을 때만** 싣는다 — `prevLang === undefined`는 "칸이 없거나 0248a
     //    미적용"이고, 그때 실으면 update 전체가 실패하거나(미적용) 다른 경로 저장이 이 값을 null로
@@ -424,7 +433,7 @@ export async function updateStaff(
 
   if (error) {
     // 0209a/0212a/0224a/0227a 미적용이면 선택 토글만 빼고 나머지를 저장한다(#95 — 직원 수정 화면을 죽이지 않음).
-    if (/seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access|teacher_view_lang/i.test(error.message)) {
+    if (/seat_lab_duty|seat_jj_duty|shuttle_duty|desk_attendance_optin|teacher_view_access|teacher_view_lang|native_teacher/i.test(error.message)) {
       const { error: retry } = await supabase.from("users").update(staffPatch).eq("id", id);
       if (retry) return staffSaveError(retry, "staff.update.retry");
       if (input.seatLabDuty || input.seatJjDuty || input.shuttleDuty || input.deskAttendanceOptin) {

@@ -26,7 +26,12 @@ export async function switchDemoRoster(
     action: "demo_roster_apply",
     targetType: "demo_roster",
     targetLabel: result.label,
-    metadata: { label: result.label, students: result.students },
+    metadata: {
+      label: result.label,
+      students: result.students,
+      modulesBefore: result.modules.before,
+      modulesAfter: result.modules.after,
+    },
   });
   updateTag(tenantSettingsTag(user.tenantId));
   updateTag(`dashboard-invoice-trend:${user.tenantId}`);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { assistantViewer, isGateFailure } from "@/features/assistant/server/gate";
+import { isGateFailure, scopedViewer } from "@/features/assistant/server/gate";
 import { suggestionScope, suggestionsFor } from "@/features/assistant/server/suggestions-service";
 import { FALLBACK_SUGGESTIONS } from "@/features/assistant/suggestions";
 import { kstToday } from "@/lib/date-kst";
@@ -14,17 +14,17 @@ const NO_STORE = { headers: { "Cache-Control": "no-store" } };
  * 셸이 저절로 부르는 조회라 GET(#137). 계산이 실패하면 고정 문장(`fallback`).
  */
 export async function GET(request: Request) {
-  const viewer = await assistantViewer();
+  const viewer = await scopedViewer();
   if (isGateFailure(viewer)) return NextResponse.json({ error: viewer.error }, { status: viewer.status, ...NO_STORE });
   const url = new URL(request.url);
   const today = kstToday();
   try {
     return NextResponse.json(
-      await suggestionsFor(viewer.owner, today, { have: url.searchParams.get("have"), refresh: url.searchParams.get("refresh") === "1" }),
+      await suggestionsFor(viewer.owner, viewer.scope, today, { have: url.searchParams.get("have"), refresh: url.searchParams.get("refresh") === "1" }),
       NO_STORE,
     );
   } catch (error) {
     reportError(error, { scope: "api.assistant.suggestions", tenantId: viewer.owner.tenantId });
-    return NextResponse.json({ scope: suggestionScope(viewer.owner), day: today, items: FALLBACK_SUGGESTIONS, fallback: true }, NO_STORE);
+    return NextResponse.json({ scope: suggestionScope(viewer.owner, viewer.scope), day: today, items: FALLBACK_SUGGESTIONS, fallback: true }, NO_STORE);
   }
 }

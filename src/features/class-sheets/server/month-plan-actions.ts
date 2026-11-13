@@ -27,6 +27,7 @@ import { mpStructuralChange, type MpSaveIntent } from "../lib/edit-audit";
 import { MP_ALL_COLUMNS, MP_TITLE_MAX, type MpColKind } from "../lib/month-plan";
 import { YMD_RE } from "../lib/week";
 import { requireEcsClassAccess } from "./access";
+import { eieModuleOn } from "./eie-on";
 
 export type MpCellPatch = {
   date: string;
@@ -55,8 +56,8 @@ export async function saveMonthPlanCells(input: {
 }): Promise<MpSaveResult> {
   const gate = await requireEcsClassAccess(input.classId, { write: true });
   if (!gate.ok) return { ok: false, error: gate.error };
-  if (gate.access.englishTrack !== "eie") {
-    return { ok: false, error: "월간 계획서는 EiE 반에서만 사용합니다" };
+  if (!(await eieModuleOn()) || gate.access.englishTrack !== "eie") {
+    return { ok: false, error: "이 화면에서는 저장할 수 없습니다" };
   }
 
   const patches = input.patches ?? [];

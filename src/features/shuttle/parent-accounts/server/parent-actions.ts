@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { phoneLabel } from "@/lib/format/phone";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
@@ -28,7 +29,7 @@ export async function createParentAccount(
 
   const displayName = String(formData.get("displayName") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const phone = String(formData.get("phone") ?? "").trim() || null;
+  const phone = phoneLabel(String(formData.get("phone") ?? ""));
   const password = String(formData.get("password") ?? "");
   const studentId = String(formData.get("studentId") ?? "");
   const relationship = String(formData.get("relationship") ?? "부모").trim() || "부모";

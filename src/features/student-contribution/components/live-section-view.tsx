@@ -14,6 +14,7 @@ function Item({ item }: { item: LiveItem }) {
   </li>;
 }
 export function LiveSectionView({ section }: { section: LiveSection }) {
+  if (section.state === "off") return null;
   const readable = section.state === "ready" || section.state === "partial";
   return <article className="min-w-0 rounded-xl border border-line bg-card">
     <div className="flex items-center justify-between gap-3 border-b border-line-faint px-4 py-3">

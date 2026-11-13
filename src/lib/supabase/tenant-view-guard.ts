@@ -39,6 +39,23 @@ export const TENANT_VIEW_READ_RPCS: ReadonlySet<string> = new Set([
   "todays_math_exam_report_dates",
   // 사람별 열린 할 일(0377a) — 서버가 관리 키로 부르는 읽기(보기 중엔 할 일 화면이 비어 부르지 않는다). 목록 규약상 여기 둔다.
   "staff_task_counts",
+  // 담당자별 의무 집계(s2_0069) — 강사 홈 '오늘 내 업무' 줄이 관리 키로 부르는 읽기. 목록 규약상 여기 둔다.
+  "duty_counts",
+  // 기한 지났는데 열린 의무가 남은 지난 날들(s2_0069) — cron이 관리 키로 부르는 읽기. 목록 규약상 여기 둔다.
+  "duty_open_cycles",
+  // 업무 완성도 관리자 화면의 집계 셋(s2_0075) — 서버가 관리 키로 부르는 읽기 전용 group-by.
+  "duty_rollup_owner_kind",
+  "duty_rollup_class",
+  "duty_rollup_student",
+  "duty_rollup_student_ex",
+  "duty_rollup_owner_load",
+  // 선생님별 수업보고서 평점 평균(s2_0089) — 읽기 전용 group-by(지점 보기에서는 평점 권한이 없어 부르지 않는다 · 목록 규약상 여기 둔다).
+  "duty_report_rating_by_owner",
+  // 퇴원보고서 작성 차례 집계 · 목록(s2_0093) — 업무 완성도 참고 열 · 칸 목록. 서버가 관리 키로 부르는 읽기 전용.
+  "duty_withdrawal_write_rollup",
+  "duty_withdrawal_write_items",
+  // 영상 숙제 출제 · 회수(s2_0094) — 업무 완성도 참고 열. 읽기 전용 group-by.
+  "duty_video_homework_rollup",
   // 출결 통계 등원율 추이(0387a) — 읽기 전용 group-by.
   "attendance_rate_buckets",
   // 원생 기여도 학생별 합계(0443a) — 읽기 전용 집계(stable). 지점 보기에서도 기여도 화면이 같은 값을 읽게.

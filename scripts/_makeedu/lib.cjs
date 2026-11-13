@@ -293,7 +293,17 @@ function summarizeFailures(failed, { maxReason = 300, maxError = 1000 } = {}) {
   };
 }
 
+/** 수동 강제 실행도 지점 기능 스위치는 건너뛰지 않는다. 조회 실패는 호출자에게 전달해 실행을 멈춘다. */
+async function isMakeeduModuleEnabled(sql, tenantId) {
+  const { isRawModuleEnabled } = await import("../_shared/module-state.mjs");
+  const [row] = await sql`
+    select jsonb_build_object('preset', data->'preset', 'modules', data->'modules') as module_settings
+    from tenant_settings where tenant_id = ${tenantId}`;
+  return isRawModuleEnabled(row?.module_settings, "makeedu");
+}
+
 module.exports = {
+  isMakeeduModuleEnabled,
   recordSync,
   summarizeFailures,
   tieredMatcher,

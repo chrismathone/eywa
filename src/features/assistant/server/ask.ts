@@ -1,7 +1,7 @@
 import "server-only";
 /**
- * 학원 비서 질문 한 번 — 문(원장·슈퍼관리자) → 지점 AI 라이선스 → 하루 상한·겹침 → 대화 저장('도는 중') →
- * 비서 DB 연결(이 지점으로 묶음) → AI 루프 → 답 저장 · 감사 기록 · 사용량 장부. 진행은 `emit`으로 흘려보낸다.
+ * 학원 비서 질문 한 번 — 문(학원 비서 권한) + 지금 권한 범위 → 지점 AI 라이선스 → 하루 상한·겹침 → 대화 저장('도는 중') →
+ * 비서 DB 연결(이 지점 + 묻는 사람의 범위로 묶음 · s2_0096) → AI 루프 → 답 저장(쓴 자료의 묶음 표지) · 감사 기록 · 사용량 장부. 진행은 `emit`으로 흘려보낸다.
  * 🔴 화면 연결이 끊겨도 끝까지 돌고 저장한다(화면은 대화를 다시 읽는다) — 그래서 `signal`은 사람이 '멈춤'을 눌렀을 때만 쓴다.
  */
 import OpenAI from "openai";
@@ -18,8 +18,9 @@ import { ASSISTANT_DOCS } from "../catalog";
 import { clipText } from "../text";
 import { AssistantError, runAssistantAgent } from "./agent";
 import { saveAdvice } from "./advice-store";
-import { openAssistantDb } from "./executor";
-import { assistantViewer, isGateFailure } from "./gate";
+import { loadScopeMap, openAssistantDb } from "./executor";
+import { isGateFailure, scopedViewer } from "./gate";
+import { MASTER_SCOPE, requiredKeys } from "../scope";
 import { ASSISTANT_FEATURE, ASSISTANT_MODEL } from "./models";
 import { assistantKeyEnv, getTerraClient } from "./terra-client";
 import {
@@ -38,7 +39,7 @@ import {
 /** 보고서를 쓸 시간 — 고정 기한에서 이만큼 앞이 마무리 시각이다. */
 const REPORT_RESERVE_MS = 200_000;
 
-export type AskInput = { threadId?: string | null; question: string; /** 옛 호출 호환용이며 모델 선택에 사용하지 않는다. */ level?: AssistantLevel; clientRef?: string | null };
+export type AskInput = { threadId?: string | null; question: string; /** 옛 호출 호환용이며 모델 선택에 사용하지 않는다. */ level?: AssistantLevel; clientRef?: string | null; redoOf?: string | null };
 
 /** 사람에게 보일 오류 문장(한국어가 아닌 원문은 내지 않는다). */
 export function assistantErrorMessage(error: unknown): string {
@@ -59,9 +60,10 @@ export async function prepareAsk(
   input: AskInput,
 ): Promise<{ error: string; status: number; code?: "busy" | "day" } | { messageId: string; run: (emit: (e: AskEvent) => void) => Promise<void> }> {
   const begun = Date.now();
-  const viewer = await assistantViewer();
+  // 문 + 지금 권한 범위(묶음 키 · s2_0096) — 권한을 못 읽으면 시작하지 않는다(기본값으로 넓히지 않는다).
+  const viewer = await scopedViewer();
   if (isGateFailure(viewer)) return viewer;
-  const { owner } = viewer;
+  const { owner, scope } = viewer;
   try {
     await requireAiLicense({ tenantId: owner.tenantId, feature: ASSISTANT_FEATURE });
   } catch (error) {
@@ -120,15 +122,22 @@ export async function prepareAsk(
       let queries: QueryResult[] = [];
       let checks: AdviceCheckResult[] = [];
       let askedOn = "";
+      // 읽은 보기·칸 이름 — 루프가 멈춤·오류로 던져도 남는다(저장 표지 · 적대 리뷰 2026-11-12).
+      const used = { tables: new Set<string>(), columns: new Set<string>() };
+      let historyKeys: string[] = [];
       let failure: string | null = null;
-      const db = await openAssistantDb(owner.tenantId).catch((error: unknown) => {
-        reportError(error, { scope: "assistant.db.open", tenantId: owner.tenantId });
+      let openError: unknown = null;
+      const db = await openAssistantDb(owner.tenantId, { userId: viewer.user.id, keys: scope }).catch((error: unknown) => {
+        if (!(error instanceof AssistantError)) reportError(error, { scope: "assistant.db.open", tenantId: owner.tenantId });
+        openError = error;
         return null;
       });
       try {
-        if (!db) throw new AssistantError("비서 DB에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요");
-        // 서로 기다릴 까닭이 없는 두 조회(B4).
-        const [history, asker] = await Promise.all([started.created ? [] : pastTurns(owner, started.threadId), askerLabel(viewer.user.id, viewer.user.systemRole)]);
+        if (!db) throw openError instanceof AssistantError ? openError : new AssistantError("비서 DB에 연결하지 못했습니다. 잠시 뒤 다시 물어봐 주세요");
+        // 서로 기다릴 까닭이 없는 두 조회(B4). 지난 차례는 지금 권한으로 볼 수 있는 답만(store.ts pastTurns).
+        const [history, asker] = await Promise.all([started.created ? [] : pastTurns(owner, started.threadId, scope, input.redoOf ?? null), askerLabel(viewer.user.id, viewer.user.systemRole)]);
+        // 이어 묻기는 앞 답의 숫자를 다시 말할 수 있다 — 앞 답들의 표지를 이 답의 표지에 합친다(표지 없는 옛 답 = 원장).
+        historyKeys = history.flatMap((t) => (t.report ? (t.scopeKeys ?? [MASTER_SCOPE]) : []));
         const out = await runAssistantAgent({
           client,
           db,
@@ -145,6 +154,7 @@ export async function prepareAsk(
           },
           signal,
           wrapSignal: wrap.signal,
+          used,
           onUsage: async (u) => {
             usage.push({
               model: u.model,
@@ -190,8 +200,12 @@ export async function prepareAsk(
       }
       // 저장 — 흘려보낸 답과 저장본이 어긋나지 않게(재리뷰 2026-11-06): 실패하면 표·차트 자료를 뺀 보고서로 한 번 더,
       // 그래도 안 되면 상태만 '실패'로 닫고 화면에도 실패로 보낸다(화면에 보인 답이 다시 열면 사라지거나 다음 질문이 맥락을 잃지 않게).
+      // 저장 표지 = 이 답이 읽은 보기의 묶음 키(다시 열 때 지금 권한과 견준다 · Codex 합의 9). 대응표를 못 읽으면 묻는 사람의 범위 전체로(넉넉한 쪽 — 더 좁은 권한에는 안 보인다).
+      // 답이 없으면(멈춤·실패) 묻는 사람의 범위 전체로 — 저장되는 진행 단계(조회 목적·표 이름·행 수)도 그 범위의 자료다(넉넉한 쪽).
+      const tableKeys = used.tables.size ? await loadScopeMap().then((map) => requiredKeys(used.tables, map, used.columns, scope), () => [...scope]) : [];
+      const scopeKeys = [...new Set([...tableKeys, ...historyKeys, ...(report ? [] : scope)])].sort();
       const save = (r: SettledReport | null) =>
-        finishMessage(owner, { threadId: started.threadId, messageId: started.messageId, level: DEFAULT_ASSISTANT_LEVEL, report: r, error: failure, queries, steps: [...steps.values()], usage });
+        finishMessage(owner, { threadId: started.threadId, messageId: started.messageId, level: DEFAULT_ASSISTANT_LEVEL, report: r, error: failure, queries, steps: [...steps.values()], usage, scopeKeys });
       try {
         await save(report);
       } catch (error) {
@@ -213,7 +227,7 @@ export async function prepareAsk(
       let adviceCount = 0;
       if (report && askedOn) {
         try {
-          const advice = await saveAdvice(owner, { messageId: started.messageId, threadId: started.threadId, report, checks, askedOn });
+          const advice = await saveAdvice(owner, { messageId: started.messageId, threadId: started.threadId, report, checks, askedOn, scopeKeys });
           adviceCount = advice.length;
           if (advice.length) report = { ...report, advice };
         } catch (error) {

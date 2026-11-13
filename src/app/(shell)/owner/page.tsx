@@ -3,7 +3,7 @@ import { requireAccess } from "@/lib/auth/require-access";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { permissionAccountIds, platformAccountIds } from "@/features/owner/server/platform-settings";
-import { canAccessTenant, canWriteTenant, canManageTenant, getUserPermMatrix } from "@/lib/auth/perm-matrix";
+import { canAccessTenant, canWriteTenant, canManageTenant, getUserPermMatrix, tenantClosedMenus } from "@/lib/auth/perm-matrix";
 import { OWNER_SECTION_MENU, type SettingsRoleKey } from "@/lib/settings-role-catalog";
 import { fallbackOwnerFace, ownerFaceHref, ownerFaceMenu } from "@/features/owner/face-access";
 import { operationsForViewer, seatPinStatus } from "@/features/owner/seat-pin-view";
@@ -40,6 +40,7 @@ import { SameNameFace } from "./_components/same-name-face";
 import { AuditFace } from "./_components/audit-face";
 import { IntegrationsFace } from "./_components/integrations-face";
 import { isFeatureLicensed } from "@/lib/license/server";
+import { ARCHIVE_TENANT } from "@/features/marketing-archive/model";
 import { isLaboratoryMenuAvailable } from "@/lib/laboratory/server";
 import { PopupsFace } from "./_components/popups-face";
 import { ImportHubFace } from "./_components/import-hub-face";
@@ -218,6 +219,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
   const hiddenSettingKeys: SettingsRoleKey[] = [];
   // 지점 AI가 꺼져 있으면 AI 멘트 칸과 학원 비서 줄을 세우지 않는다(꺼진 기능은 있었는지조차 모르게 — 판정은 perm-matrix capSettingFeatures와 같은 라이선스).
   const hiddenMenuKeys: MenuKey[] = [];
+  if (showsPermissions) hiddenMenuKeys.push(...await tenantClosedMenus());
   if (showsPermissions && !(await isFeatureLicensed(viewer.tenantId, "ai_analysis"))) {
     hiddenSettingKeys.push("ai_ment");
     hiddenMenuKeys.push("assistant");
@@ -355,6 +357,7 @@ export default async function OwnerSettingsPage({ searchParams }: { searchParams
               connectedApps={connectedApps}
               baselineToken={permissionsToken(permissionsSource)}
               baselineVersion={editable?.versions.permissions}
+              marketingArchive={viewer.tenantId === ARCHIVE_TENANT}
             />
           ) : null
         ) : (

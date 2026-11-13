@@ -4,6 +4,7 @@ import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions"
 import { getMonthPlanPrint } from "@/features/class-sheets/server/month-plan-print";
 import { MonthPlanPaper } from "./month-plan-paper";
 import { MpFitToPage } from "./fit-to-page";
+import { notFound } from "next/navigation";
 
 export const metadata: Metadata = { title: "월간 계획서 인쇄 — 에이와" };
 
@@ -30,16 +31,8 @@ export default async function EcsMonthPlanPrintPage({
   const res = await getMonthPlanPrint(classId, month ?? null, period ?? null);
   const embedded = (await headers()).get("x-embed") === "1";
 
-  if (!res.ok) {
-    return (
-      <div className="mx-auto max-w-[277mm] px-8 py-10">
-        <div className="print:hidden">
-          <PrintActions embedded={embedded} />
-        </div>
-        <p className="text-[13px] text-black">{res.error}</p>
-      </div>
-    );
-  }
+  if (!res.ok && res.reason === "module_disabled") notFound();
+  if (!res.ok) return <p className="m-6 text-sm">{res.error}</p>;
 
   return (
     // ⚠️ 인쇄에선 바깥 여백을 0으로 — 여백은 `@page`가 한 번만 준다(두 번 주면 한 장에 안 들어간다).

@@ -718,6 +718,31 @@ describe("출석부 표 골격", () => {
     expect(screen.queryByRole("button", { name: "비율 설정" })).not.toBeInTheDocument();
   });
 
+  it("회차 정산 재료가 undefined면 단가·등록 차수 열 없이 합계와 실급여 빈칸을 정상으로 그린다", () => {
+    const { container } = render(
+      <MatrixTable
+        groups={[LESSON_GROUP]}
+        days={DAYS}
+        holidays={{}}
+        showGroups
+        ordered={[]}
+        showActualAmount
+        salaryRates={{ regular: { 고등: 50 }, special: {}, classes: {} }}
+        classBilledAmounts={{ [rowKey(C, S1)]: 200000 }}
+        confirmedPricesByRow={undefined}
+        termSessionsByRow={undefined}
+        priceConfirmedRows={undefined}
+      />,
+    );
+    expect(screen.queryByRole("columnheader", { name: "단가" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "등록 차수" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "차이확인" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "실급여" })).toBeInTheDocument();
+    expect(container.querySelector('tfoot [data-att-column="actualSalary"]')).toHaveTextContent("—");
+    expect(container.querySelector('tfoot [data-att-column="units"]')).toBeInTheDocument();
+    expect(container.querySelector('tfoot [data-att-column="termSessions"]')).toBeNull();
+  });
+
   // 🔴 열 폭이 내용에서 나오면 반을 접을 때마다(긴 학교 이름이 사라질 때마다) 표가 출렁인다.
   //    폭의 단일 소스는 colgroup이고, 표는 table-fixed여야 그 값이 실제로 쓰인다.
   it("🔴 열 폭은 colgroup이 정한다 — 내용이 아니라(table-fixed)", () => {

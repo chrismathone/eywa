@@ -11,6 +11,7 @@ import { isAssistantLevel, type AssistantLevel } from "../levels";
 import { ASSISTANT_MAX_RUNNING, ASSISTANT_RUNNING_MS, type AskStep, type QuerySummary, type ThreadDetailResponse, type ThreadMessage, type ThreadSummary } from "../protocol";
 import type { AssistantReport, QueryResult, SettledReport } from "../report";
 import { clipText } from "../text";
+import { covers } from "../scope";
 import type { AdviceView } from "../advice";
 import { adviceForMessages } from "./advice-store";
 import type { PastTurn } from "./prompt";
@@ -37,6 +38,8 @@ const DETAIL_DATASET_TURNS = 8;
 const DETAIL_DATASET_CHARS = 2_500_000;
 
 export type Owner = { tenantId: string; userId: string };
+/** 다시 열 때 견줄 지금 권한 범위(scope.ts 묶음 키) — 덮지 못하는 답은 내용 대신 안내로 보인다(Codex 합의 9). */
+export type ViewerScope = readonly string[];
 
 type ThreadRow = { id: string; title: string; level: string; updated_at: string };
 /** 대화 읽기용 — 보고서는 글(제목·블록)만 읽고 표·차트 자료(datasets)는 따로 최근 것만 읽는다. */
@@ -56,6 +59,8 @@ type MessageRow = {
   error: string | null;
   queries: Array<QuerySummary & { sql?: string }> | null;
   steps: AskStep[] | null;
+  /** 이 답이 쓴 자료의 묶음 키(s2_0096) — null = 표지 전 옛 답(원장만). */
+  scope_keys?: string[] | null;
   created_at: string;
 };
 type Datasets = SettledReport["datasets"];
@@ -199,31 +204,43 @@ function toMessage(m: MessageRow, now: number, datasets: ReadonlyMap<string, Dat
   };
 }
 
-export async function threadDetail(owner: Owner, threadId: string): Promise<ThreadDetailResponse | null> {
+/** 지금 권한으로 볼 수 없는 답 — 글·표·조회 대신 이 안내만 보인다(질문 글은 본인이 쓴 것이라 그대로). */
+const OUT_OF_SCOPE_BLOCKS: AssistantReport["blocks"] = [
+  { type: "callout", tone: "info", title: "지금 권한으로 볼 수 없는 답", text: "이 답은 지금 권한 밖의 자료로 만들어졌습니다. 권한은 원장이 학원 설정 → 역할·권한에서 정합니다." },
+];
+function hideOutOfScope(m: MessageRow): MessageRow {
+  return { ...m, report_title: m.status === "done" ? "볼 수 없는 답" : m.report_title, report_blocks: m.status === "done" ? OUT_OF_SCOPE_BLOCKS : null, report_coverage: null, report_cut: null, queries: [], steps: [] };
+}
+
+export async function threadDetail(owner: Owner, threadId: string, scope: ViewerScope): Promise<ThreadDetailResponse | null> {
   const thread = await ownThread(owner, threadId);
   if (!thread) return null;
   const db = createAdminClient();
   const { data, error } = await db
     .from(MESSAGES)
-    .select("id, question, level, status, report_title:report->>title, report_blocks:report->blocks, report_coverage:report->coverage, report_cut:report->>cutShort, cancel_requested_at, error, queries, steps, created_at")
+    .select("id, question, level, status, report_title:report->>title, report_blocks:report->blocks, report_coverage:report->coverage, report_cut:report->>cutShort, cancel_requested_at, error, queries, steps, scope_keys, created_at")
     .eq("thread_id", threadId)
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
     .order("created_at", { ascending: false })
     .limit(DETAIL_MESSAGES);
   if (error) throw new Error(error.message);
-  const rows = ((data ?? []) as unknown as MessageRow[]).reverse();
+  // 🔴 지금 권한이 이 답이 쓴 자료를 다 덮지 못하면(권한이 줄었다 · 표지 없는 옛 답은 원장만) 내용·표·조회·의견을 내보내지 않는다.
+  const raw = ((data ?? []) as unknown as MessageRow[]).reverse();
+  const hidden = new Set(raw.filter((m) => m.status !== "running" && !covers(scope, m.scope_keys)).map((m) => m.id));
+  const rows = raw.map((m) => (hidden.has(m.id) ? hideOutOfScope(m) : m));
   // 비서 의견 처리 상태(제안 → 결과 → 학습 · s2_0036) — 표·차트 자료와 함께 읽는다(서로 기다릴 까닭이 없다 · B4).
   // 못 읽어도 대화는 연다(처리 단추만 빠진다 · SQL 적용 전 배포도 산다 #95).
   const advicePromise = adviceForMessages(
     owner,
-    rows.filter((m) => m.status === "done").map((m) => m.id),
+    rows.filter((m) => m.status === "done" && !hidden.has(m.id)).map((m) => m.id),
+    scope,
   ).catch((error: unknown) => {
     reportWarning("학원 비서 의견 처리 상태 읽기 실패", { scope: "assistant.advice.read", tenantId: owner.tenantId, error: error instanceof Error ? error.message : String(error) });
     return new Map<string, AdviceView[]>();
   });
   // 표·차트 자료는 최근 답 몇 편만(응답 크기 상한 — 오래된 답은 '생략' 안내).
-  const recent = rows.filter((m) => m.status === "done").slice(-DETAIL_DATASET_TURNS).map((m) => m.id);
+  const recent = rows.filter((m) => m.status === "done" && !hidden.has(m.id)).slice(-DETAIL_DATASET_TURNS).map((m) => m.id);
   const datasets = new Map<string, Datasets>();
   if (recent.length) {
     const { data: sets, error: setsError } = await db
@@ -293,24 +310,48 @@ export async function renameThread(owner: Owner, threadId: string, title: string
   return (data ?? []).length > 0 ? clean : null;
 }
 
-/** 다음 질문에 붙일 지난 차례(끝난 것만 · 최근 6). */
-export async function pastTurns(owner: Owner, threadId: string): Promise<PastTurn[]> {
+/**
+ * 최신순 이력에서 지금 다시 묻는 원래 답과 같은 질문의 오래된 완료 답을 뺀다.
+ * 단일 모델 전환 뒤에는 옛 강도의 우열을 쓰지 않는다. 최신 Terra low 답이 옛 high 답과 함께 근거로 돌아오지 않게 한다.
+ */
+export function keepHistoryTurns<T extends { id: string; question: string; level: string; status?: string }>(rowsNewestFirst: readonly T[], exclude: string | null): T[] {
+  const answered = new Set<string>();
+  const out: T[] = [];
+  for (const m of rowsNewestFirst) {
+    if (m.id === exclude) continue;
+    if (answered.has(m.question)) continue;
+    // 실제로 답이 나온 차례만 앞 답을 밀어낸다 — 멈춘·실패한 다시 묻기가 유일한 실제 답(적음)을 지우지 않게(재리뷰).
+    if (m.status === undefined || m.status === "done") answered.add(m.question);
+    out.push(m);
+  }
+  return out;
+}
+
+/**
+ * 다음 질문에 붙일 지난 차례(끝난 것만 · 최근 6). `exclude`는 다시 묻는 원래 질문 — 이전 답의 조회·해석을 새 답의 근거로 이어 가지 않게 한다.
+ */
+export async function pastTurns(owner: Owner, threadId: string, scope: ViewerScope, exclude: string | null = null): Promise<PastTurn[]> {
   const { data, error } = await createAdminClient()
     .from(MESSAGES)
-    .select("question, report_title:report->>title, report_blocks:report->blocks, queries, status, created_at")
+    .select("id, question, level, report_title:report->>title, report_blocks:report->blocks, queries, status, scope_keys, created_at")
     .eq("thread_id", threadId)
     .eq("tenant_id", owner.tenantId)
     .eq("user_id", owner.userId)
     .in("status", ["done", "failed"])
     .order("created_at", { ascending: false })
-    .limit(HISTORY_TURNS);
+    // 걸러 낼 몫(다시 묻는 원래 답 · 같은 질문의 이전 완료 답)까지 넉넉히 읽고 6칸으로 자른다.
+    .limit(HISTORY_TURNS * 2);
   if (error) throw new Error(error.message);
-  return ((data ?? []) as unknown as Array<Pick<MessageRow, "question" | "report_title" | "report_blocks" | "queries" | "status">>)
+  // 🔴 지금 권한으로 볼 수 없는 답은 이어 묻기 맥락에도 싣지 않는다(권한이 줄어든 뒤 옛 답의 숫자가 AI로 새지 않게).
+  const rows = ((data ?? []) as unknown as Array<Pick<MessageRow, "id" | "question" | "level" | "report_title" | "report_blocks" | "queries" | "status" | "scope_keys">>).filter((m) => covers(scope, m.scope_keys));
+  return keepHistoryTurns(rows, exclude)
+    .slice(0, HISTORY_TURNS)
     .reverse()
     .map((m) => ({
       question: m.question,
       report: m.status === "done" && m.report_title !== null && Array.isArray(m.report_blocks) ? { title: m.report_title, blocks: m.report_blocks } : null,
       queries: (m.queries ?? []).filter((q) => q.sql).map((q) => ({ id: q.id, purpose: q.purpose, sql: q.sql! })),
+      scopeKeys: m.scope_keys ?? null,
     }));
 }
 
@@ -449,13 +490,25 @@ export type Usage = { model: string; input: number; output: number; cacheRead: n
  */
 export async function finishMessage(
   owner: Owner,
-  input: { threadId: string; messageId: string; level: AssistantLevel; report: SettledReport | null; error: string | null; queries: QueryResult[]; steps: AskStep[]; usage: Usage[] },
+  input: {
+    threadId: string;
+    messageId: string;
+    level: AssistantLevel;
+    report: SettledReport | null;
+    error: string | null;
+    queries: QueryResult[];
+    steps: AskStep[];
+    usage: Usage[];
+    /** 이 답이 쓴 자료의 묶음 키(s2_0096) — 다시 열 때 지금 권한과 견준다. */
+    scopeKeys: readonly string[];
+  },
 ): Promise<void> {
   const db = createAdminClient();
   const { error } = await db
     .from(MESSAGES)
     .update({
       status: input.report ? "done" : "failed",
+      scope_keys: [...input.scopeKeys],
       report: input.report,
       error: input.error,
       queries: input.queries.map((q) => ({ id: q.id, purpose: q.purpose, sql: clipText(q.sql, STORED_SQL_CHARS, "…"), rowCount: q.rowCount, ms: q.ms })),

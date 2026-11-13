@@ -5,7 +5,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({}) }));
 
 import type { SettledReport } from "../report";
-import { compactReport, kpiFromData } from "./store";
+import { compactReport, keepHistoryTurns, kpiFromData } from "./store";
 
 const report = (rows: Array<Record<string, string | number | null>>, extra: SettledReport["datasets"] = {}): SettledReport => ({
   title: "t",
@@ -57,5 +57,22 @@ describe("다시 연 답의 KPI — 한국어 이름으로 바꾼 자료와 맞�
     const out = kpiFromData(blocks, data);
     expect(out[0]).toMatchObject({ items: [{ value: "수학" }, { value: 12 }, { value: "그대로" }, { value: "english" }] });
     expect(out[1]).toBe(blocks[1]);
+  });
+});
+
+describe("이력에서 빼는 차례(단일 모델 재질문 · 2026-11-13)", () => {
+  const row = (id: string, question: string, level: string) => ({ id, question, level });
+  it("다시 묻는 원래 답(exclude)을 뺀다", () => {
+    expect(keepHistoryTurns([row("M2", "Q", "high"), row("M1", "Q", "low")], "M1").map((r) => r.id)).toEqual(["M2"]);
+  });
+  it("같은 질문의 최신 완료 답만 남기며 옛 강도는 우선순위가 아니다", () => {
+    const rows = [row("M4", "다른 질문", "normal"), row("M3", "Q", "high"), row("M2", "Q", "low"), row("M1", "Q", "high")];
+    expect(keepHistoryTurns(rows, null).map((r) => r.id)).toEqual(["M4", "M3"]);
+    expect(keepHistoryTurns([row("M2", "Q", "low"), row("M1", "Q", "low")], null).map((r) => r.id)).toEqual(["M2"]);
+    expect(keepHistoryTurns([row("new-terra", "Q", "low"), row("old-opus", "Q", "high")], null).map((r) => r.id)).toEqual(["new-terra"]);
+  });
+  it("멈춘·실패한 다시 묻기는 앞의 실제 답을 밀어내지 않는다", () => {
+    const rows = [{ ...row("M2", "Q", "high"), status: "failed" }, { ...row("M1", "Q", "low"), status: "done" }];
+    expect(keepHistoryTurns(rows, null).map((r) => r.id)).toEqual(["M2", "M1"]);
   });
 });

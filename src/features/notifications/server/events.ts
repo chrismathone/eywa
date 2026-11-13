@@ -40,6 +40,7 @@ import { resolveSkillAreas } from "@/features/owner/skill-areas";
 import { stripTextbookPages } from "@/features/onescreen/textbook-carry";
 import type { TodaysMathFillRow } from "@/features/onescreen/todays-math-fill-rules";
 import { isFeatureOptedIn } from "@/lib/license/server";
+import { isModuleOnForTenant } from "@/features/owner/server/modules";
 import {
   absenceDigestBody,
   absenceNotificationLink,
@@ -472,7 +473,10 @@ async function detectEnrollmentFollowup(admin: SupabaseClient, tenantId: string)
  * ⚠️ injaewon은 현재 성적 0건이라 미발화 — 학원이 성적 입력 시작 시 작동(거짓 알림 0). retention과
  * 동일 180일 창에서 (학생,과목)별 최신 2건 비교. bucket=최신 gradeId라 새 점수 1회만 알린다.
  */
-async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise<number> {
+export async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise<number> {
+  // 성적 기록 알림이 아니라 이탈 방어의 위험 신호다: retention 기준을 재사용하고 확인 화면도 /retention 하나다.
+  // 기능을 끈 동안에도 후보를 본 것으로 기록하되 알림은 만들지 않는다. 그래야 다시 켠 첫 실행에 밀린 급락이 쏟아지지 않는다.
+  const retentionOn = await isModuleOnForTenant(tenantId, "retention");
   const today = kstToday();
   const since = new Date(Date.parse(`${today}T00:00:00Z`) - 180 * 86_400_000).toISOString().slice(0, 10);
   const rows = await fetchAllPaged<{
@@ -494,8 +498,10 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
   );
   if (rows.length === 0) return 0;
 
-  const { operations } = await getTenantSettingsByTenantId(tenantId);
-  const subjects = buildSubjectMaps(operations.subjects);
+  const settings = await getTenantSettingsByTenantId(tenantId);
+  const subjects = buildSubjectMaps(settings.operations.subjects);
+  // 무발송 시드와 링크가 같은 판정을 쓴다. 설정을 다시 풀어 서로 다른 순간의 값을 섞지 않는다.
+  const gradeDropLink = retentionOn ? "/retention" : null;
   const gradeRows: GradeRow[] = rows.map((row) => {
     const student = (Array.isArray(row.student) ? row.student[0] : row.student) as { name?: string } | undefined;
     const score = row.score == null ? null : Number(row.score);
@@ -513,8 +519,8 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
 
   const candidates = buildGradeDropEvents(gradeRows);
   const cold = await isColdStart(admin, tenantId, "grade_drop");
-  const fresh = (await recordNew(admin, tenantId, "grade_drop", candidates, cold)) as GradeDropEvent[];
-  if (cold || fresh.length === 0) return 0;
+  const fresh = (await recordNew(admin, tenantId, "grade_drop", candidates, cold || !retentionOn)) as GradeDropEvent[];
+  if (!retentionOn || cold || fresh.length === 0) return 0;
 
   const items: NotifyInput[] = [];
   const studentTeachers = await getStudentActiveTeachers(
@@ -527,14 +533,14 @@ async function detectGradeDrop(admin: SupabaseClient, tenantId: string): Promise
   const masterBody = gradeDropDigestBody(withoutTeacher(fresh, studentTeachers));
   if (masterBody) {
     for (const recipientId of await activeMasterIds(admin, tenantId)) {
-      items.push({ tenantId, recipientId, type: "grade_drop", title: "성적 급락(담당 강사 없음)", body: masterBody, link: "/retention", actorId: null });
+      items.push({ tenantId, recipientId, type: "grade_drop", title: "성적 급락(담당 강사 없음)", body: masterBody, link: gradeDropLink, actorId: null });
     }
   }
   // 담당 강사 = 자기 학생 성적 급락만(결석 v2와 동일 tenant 격리 역매핑 재사용).
   for (const [teacherId, teacherEvents] of groupEventsByTeacher(fresh, studentTeachers)) {
     const body = gradeDropDigestBody(teacherEvents);
     if (!body) continue;
-    items.push({ tenantId, recipientId: teacherId, type: "grade_drop", title: "담당 학생 성적 급락", body, link: "/retention", actorId: null });
+    items.push({ tenantId, recipientId: teacherId, type: "grade_drop", title: "담당 학생 성적 급락", body, link: gradeDropLink, actorId: null });
   }
   await notifyUsers(items);
   return fresh.length;

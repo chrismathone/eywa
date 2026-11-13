@@ -19,6 +19,7 @@ import { useFormDraft } from "@/components/forms/use-form-draft";
 import { DraftBanner } from "@/components/forms/draft-banner";
 import { useModuleOn, useSubjectMaps } from "@/features/owner/operations-context";
 import { SUBJECT_SOFT } from "@/features/owner/subjects";
+import { phoneLabel } from "@/lib/format/phone";
 
 type Mode = "create" | "edit";
 
@@ -45,6 +46,8 @@ export type StaffFormValue = {
   /** 랩실 출석부 담당 — 로그인 착지 + 그 자리 쓰기. */
   seatLabDuty?: boolean;
   shuttleDuty?: boolean;
+  /** 원어민 선생님(s2_0094) — 담당 과목에 영어가 있을 때만 칸이 보인다. 켜면 업무 완성도 관리에서 빠진다. */
+  nativeTeacher?: boolean;
   /** JJ실 출석부 담당. 1차에선 저장만(화면은 아직 안 열림). */
   seatJjDuty?: boolean;
   /** 오늘 출결 데스크 알림 — 강사가 미출결을 출석으로 바꾸면 벨. */
@@ -72,6 +75,7 @@ export function StaffForm({
   jobTitleOptions = [],
   scope,
   canGrantTeacherView = false,
+  canSetNative = false,
 }: {
   mode: Mode;
   initialValue?: StaffFormValue;
@@ -81,6 +85,8 @@ export function StaffForm({
   scope?: string;
   /** '강사뷰 접근' 토글 노출 — master(+super_admin)만. 서버 액션도 같은 자격일 때만 컬럼을 저장(이중 게이트). */
   canGrantTeacherView?: boolean;
+  /** ‘원어민 선생님’을 바꿀 수 있나 — 원장(+운영자) · 보호 계정 아님(s2_0095 DB 가드와 같은 자격). */
+  canSetNative?: boolean;
 }) {
   const action = mode === "create" ? createStaff : updateStaff;
   const [state, formAction] = useActionState<StaffFormState, FormData>(action, undefined);
@@ -280,7 +286,7 @@ export function StaffForm({
                 id="phone"
                 name="phone"
                 type="tel"
-                defaultValue={v.phone ?? ""}
+                defaultValue={phoneLabel(v.phone) ?? ""}
                 placeholder="예: 010-1234-5678"
                 className={`${inputClass} num`}
               />
@@ -377,6 +383,31 @@ export function StaffForm({
           이력서의 근무부서(영어과·수학과…)를 저장하면 자동으로 맞춰집니다 — 겸임일 때만 여기서 조정하세요.
         </p>
       </Field>
+
+      {/* '원어민 선생님'(s2_0094) — 담당 과목에 영어가 있을 때만(원장 2026-11-12 *"근무 설정에 '담당 과목'이 '영어'일 경우 '원어민 선생님' 토글을 두고
+          세팅시 노출되지 않게"*). 켜면 업무 완성도 관리 목록에서 빠진다(이름에 한글이 없는 선생님은 켜지 않아도 빠진다).
+          표식 칸(`nativeTeacherField`)이 있을 때만 서버가 저장한다 — 영어를 빼면 칸이 사라지고 꺼짐으로 저장된다.
+          🔴 원장(+운영자)만 바꾼다(s2_0095 — 켜면 업무 완성도에서 빠지니 관리자 겸 강사가 자기 평가를 끌 수 없게). '강사뷰 접근'과 같은 자격. */}
+      {canSetNative ? <input type="hidden" name="nativeTeacherField" value="1" /> : null}
+      {canSetNative && selectedSubjects.some((k) => k === "english" || subjectMaps.labelOf(k) === "영어") ? (
+      <div className="border-border bg-bg-soft rounded-2xl border p-4">
+        <label htmlFor="nativeTeacher" className="flex cursor-pointer items-start gap-3">
+          <input
+            id="nativeTeacher"
+            name="nativeTeacher"
+            type="checkbox"
+            defaultChecked={v.nativeTeacher === true}
+            className="border-border text-primary focus-visible:ring-ring mt-0.5 size-4 shrink-0 rounded"
+          />
+          <span className="space-y-1">
+            <span className="text-foreground block text-sm font-medium">원어민 선생님</span>
+            <span className="text-muted-foreground block text-xs">
+              켜면 업무 완성도 화면의 선생님 목록에서 빠집니다.
+            </span>
+          </span>
+        </label>
+      </div>
+      ) : null}
 
       <Field label="시간표 색" htmlFor="bgColor">
         <input type="hidden" name="bgColor" value={bgColor} />

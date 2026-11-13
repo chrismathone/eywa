@@ -23,7 +23,7 @@ export type TeacherWorkRow = {
 export type TeacherWork = { reportFrom: string; videoFrom: string; to: string; videoCheckedAt: string | null; rows: TeacherWorkRow[];
   /** 출결 미입력 창(어제까지) · 학부모 미확인 창 시작 · 원생상담 집계 기준일과 그 달(YYYY-MM — 1일엔 지난달, `pickCounselMonth`) — 카드 아래 안내가 적는다. */
   attendanceFrom?: string; attendanceTo?: string; unreadFrom?: string; counselAsOf?: string | null; counselMonth?: string | null;
-  /** 줄 표시 여부 — 기능이 꺼진 지점엔 그 줄이 흔적 없이 빠진다(ClassNote 꺼짐 = 발송 확인·학부모 미확인 · 직원 평가 꺼짐·실험실 밖 = 원생상담). */
+  /** 줄 표시 여부 — 기능이 꺼진 지점엔 그 줄이 흔적 없이 빠진다(ClassNote 실제 발송 꺼짐 = 발송 확인·학부모 미확인 · 직원 평가 꺼짐·실험실 밖 = 원생상담). */
   deliveryShown?: boolean; counselShown?: boolean;
   /** 열린 할 일(0377a 업무 처리 확인) — 업무 처리 현황 권한이 있는 사람에게만 실린다(없으면 줄째 없음). 사람별 · 전체(함께 맡은 일은 한 번). */
   tasks?: { byUser: Record<string, { open: number; late: number }>; open: number; late: number } };

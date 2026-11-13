@@ -15,10 +15,35 @@ import { rebaseDraft } from '../apply-rebase';
 import { fingerprint, contextFingerprint, readApplyContext, type ApplyContext } from './apply-context';
 import { shiftDays } from '@/features/timetable/lib/week';
 import { parseEditorViewPref, type TimetableEditorView } from '@/features/timetable/lib/editor-view-prefs';
+import { seatBlockReason } from '@/lib/license/server';
 
 export type ApplyJob = { id: string; tenant_id: string; actor_id: string; actor_role: string; policy_hash: string; baseline_hash: string; request_hash: string; effective_date: string; apply_at: string; payload: Draft; status: string; summary: { teacherNames?: number; students?: number } | null };
 export const policyHash = (settings: Record<string, unknown>, role: string) => fingerprint({ role, permissions: settings.permissions, modules: settings.modules });
 const equal = (a: unknown, b: unknown) => fingerprint(a ?? null) === fingerprint(b ?? null);
+
+/** 새 학생이 연습본에서 실제 반에 배치됐는가 — 이때만 commitPlan이 `enrolled`로 넣는다. */
+export function labStudentAssigned(draft: Draft, studentId: string): boolean {
+  return draft.placements.some(item => item.studentIds?.includes(studentId)) || Object.values(draft.students).some(students => students.includes(studentId));
+}
+
+/** 이번 실제 반영으로 새로 생길 재원생 수. 이름만 바꾸는 기존 학생과 미배치 상담 학생은 세지 않는다. */
+export function newEnrolledStudentCount(plan: Pick<ApplyPlan, 'students'>, draft: Draft): number {
+  return plan.students.filter(student => student.beforeName === null && labStudentAssigned(draft, student.id)).length;
+}
+
+type SeatCheck = (tenantId: string, adding: number) => Promise<string | null>;
+const applySeatBlockReason: SeatCheck = (tenantId, adding) => seatBlockReason(tenantId, adding);
+
+/** 예약할 때가 아니라 실제 반영 직전에 최신 계획의 새 재원생 수로 좌석을 확인한다. */
+export async function assertTimetableLabSeats(
+  tenantId: string,
+  plan: Pick<ApplyPlan, 'students'>,
+  draft: Draft,
+  checkSeat: SeatCheck = applySeatBlockReason,
+): Promise<void> {
+  const reason = await checkSeat(tenantId, newEnrolledStudentCount(plan, draft));
+  if (reason) throw new Error(reason);
+}
 
 export async function lockLabApply(tx: postgres.TransactionSql) {
   await lockAttendanceMigration(tx);
@@ -93,7 +118,7 @@ async function commitPlan(tx: postgres.TransactionSql, job: ApplyJob, context: A
   for (const student of plan.students) {
     if (student.beforeName === null) {
       const id = student.id.slice(4); studentIds.set(student.id, id);
-      const assigned = draft.placements.some(item => item.studentIds?.includes(student.id)) || Object.values(draft.students).some(students => students.includes(student.id));
+      const assigned = labStudentAssigned(draft, student.id);
       await tx`insert into students(id,tenant_id,name,school,grade,status,enrolled_at) values(${id},${tenant},${student.name},${student.school},${student.grade},${assigned ? 'enrolled' : 'prospect'}::student_status,${assigned ? date : null}::date)`;
     } else await tx`update students set name=${student.name},updated_at=now() where tenant_id=${tenant} and id=${student.id} and name=${student.beforeName}`;
   }
@@ -165,6 +190,7 @@ export async function runApplyJob(id: string) {
       const plan = buildApplyPlan(latest.draft, latest.context, job.effective_date);
       // 강사·학생 이름 변경은 예약할 때 권한을 봤다 — 그때보다 늘면 권한을 지나지 않은 쓰기다.
       if (plan.people.length > (job.summary?.teacherNames ?? 0) || plan.students.length > (job.summary?.students ?? 0)) throw new Error('예약 이후 강사·학생 이름 변경 내용이 달라졌습니다. 다시 검사해 주세요.');
+      await assertTimetableLabSeats(job.tenant_id, plan, latest.draft);
       const { backups } = await validateOperatingLinks(tx, job.tenant_id, job.effective_date, plan, latest.context);
       return await commitPlan(tx, { ...job, payload: latest.draft }, context, plan, latest.skipped, backups);
     });

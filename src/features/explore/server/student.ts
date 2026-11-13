@@ -10,6 +10,8 @@ import { invoiceOutstanding } from "@/features/billing/calc";
 import { KIND_LABEL as GRADE_KIND_LABEL, scoreUnit, type UnifiedRow } from "@/features/grades/unified/model";
 import { getStudentUnifiedRows } from "@/features/grades/unified/server/student-records";
 import { getTenantSettings } from "@/features/owner/server/queries";
+import { isFeatureLicensed } from "@/lib/license/server";
+import { failedModuleConnectionCoverage } from "@/features/students/coverage-switches";
 import { buildSubjectMaps } from "@/features/owner/subjects";
 import { memoCategoryLabel } from "@/features/students/detail/memo-category";
 import { studentStatusMeta } from "@/features/students/status/status-labels";
@@ -51,7 +53,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
   // 규칙 — 요약·건수도 내리지 않는다). 흐름 분석은 모든 상담을 읽은 결과라 **원생상담을 전체로 보는 사람**(full·readonly)만 —
   // 강사(scoped)는 자기 상담만 보는 사람이라 권한 없음으로.
   // 🔴 읽기 강사뷰는 대상 강사의 담당(scoped)을 읽기로 누른다 — 그 강사는 자기 상담만 보는 사람이라 흐름 분석도 없다(#154 ③).
-  const [canSeeBilling, consultLevel, consultScoped] = await Promise.all([canAccessTenant(user.systemRole, "billing"), accessLevelTenant(user.systemRole, "consultations"), isScopedRead(user.systemRole, "consultations")]);
+  const [canSeeBilling, consultLevel, consultScoped, aiOn] = await Promise.all([canAccessTenant(user.systemRole, "billing"), accessLevelTenant(user.systemRole, "consultations"), isScopedRead(user.systemRole, "consultations"), isFeatureLicensed(user.tenantId, "ai_analysis")]);
   const flowAllowed = (consultLevel === "full" || consultLevel === "readonly") && !consultScoped;
   // 🔴 학생 조회·조각 조회·흐름 분석을 **한 묶음**으로(B4) — 학생 → 조각 묶음 → 흐름의 직렬 3단이 전환마다 왕복 둘을 더하고 있었다
   //    (2026-11-03 실측). 학생을 못 읽으면(없음 · 담당 밖) 나머지 결과는 버린다 — 조각 조회도 같은 RLS·게이트를 지나므로 새는 것이 없다.
@@ -71,7 +73,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
     // 출결 내역(날짜·반·상태) — 출결 탭과 같은 조회(정정 줄은 최신 하나만)를 **통계와 같은 30일 창**으로만. 영역 중심에서 '기록 33건'을 고르면
     // 이 목록이 요약함에 선다.
     settle("explore.student.attendanceFull", getStudentAttendanceFull(id, { since })),
-    flowAllowed ? settle("explore.student.flow", readFlowInsights(user.tenantId, id)) : Promise.resolve(null),
+    flowAllowed && aiOn ? settle("explore.student.flow", readFlowInsights(user.tenantId, id)) : Promise.resolve(null),
     // 약속·할 일의 90일 점검 — 신규생 관리와 같은 조회·판정. 권한 없음·표 미적용·실패를 가른다(안에서).
     loadCareChecks(id, today),
     // 기여도는 원생 상세 '기여도' 탭과 같은 열쇠 — 꺼졌으면 카드에 기여도 줄 자체가 없다(점수는 page가 따로 늦게 채운다).
@@ -252,7 +254,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
 
   const status = studentStatusMeta(student.status);
   // 오른쪽 아래 '분석·판단' — AI 흐름 분석(저장된 결과만 · 권한 판정은 위).
-  const analysis = buildStudentAnalysis({
+  const analysis = aiOn ? buildStudentAnalysis({
     allowed: flowAllowed,
     canRefresh: consultLevel === "full",
     rows: !flowRows ? null : flowRows.ok ? { ok: true, value: Object.fromEntries(FLOW_KINDS.map((k) => [k, toFlowView(k, flowRows.value[k])])) } : { ok: false },
@@ -261,7 +263,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
     today,
     // 분석 뒤 새 상담(분석 갱신을 안 부르는 저장 경로 — 이탈 방어 · 성적 화면 상담 · 엑셀 가져오기)을 알리는 재료 = 상담 조각과 같은 조회.
     actualAts: { consultations: consultations.ok ? consultations.value.map((c) => c.consultedAt) : null },
-  });
+  }) : undefined;
   // 자료 연결 상태(원장 2026-11-05 시안) — 이 화면이 읽은 원천은 그 조각 상태로, 내용을 안 싣는 원천은 연결 여부로(꺼진 기능·해당 없는 원천은 줄째 뺀다).
   const byKey = (k: string) => sectors.find((s) => s.key === k);
   const classSector = sectors.find((s) => s.key.startsWith("subject:") || s.key === "classes");
@@ -283,7 +285,7 @@ export async function loadStudentCenter(id: string): Promise<ExploreLoad> {
       label: "90일 점검",
       state: careChecks.state === "denied" ? ("restricted" as const) : careChecks.state === "error" ? ("failed" as const) : careChecks.state === "unavailable" ? ("pending" as const) : ("connected" as const),
     }]),
-    ...(coverageExtras.ok ? coverageExtras.value : [{ key: "extras", label: "클래스노트·셔틀", state: "failed" as const }]),
+    ...(coverageExtras.ok ? coverageExtras.value : failedModuleConnectionCoverage(settings.modules.disabled)),
   ];
   const aside = buildStudentAside({
     student,

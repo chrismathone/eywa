@@ -253,6 +253,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/meetings", label: "회의록", icon: MENU_ICON.meetings, menuKey: "meetings" },
       // 수업 평가 체크리스트(참관) — 테스트 단계: 기본 전원 none이라 개인 예외(이승엽)에게만 보인다.
       { href: "/class-review", label: "직원 평가", icon: MENU_ICON.class_review, menuKey: "class_review", aliases: ["참관", "수업 평가", "강사평가"] },
+      // 업무 완성도 — 의무 장부(s2_0069)를 선생님별·반별·학생별로 보는 관리자 화면(과목 관리자는 담당 과목만 · 원장은 전체). 기본 원장만.
+      { href: "/duties", label: "업무 완성도", icon: MENU_ICON.duties, menuKey: "duties", aliases: ["관리지수", "업무 현황", "의무", "완료도"] },
       // 전자결재(기안·결재함, 첫 양식 = 휴가신청서) — 기본 전원 none이라 역할 표나 개인별 메뉴 권한으로 연 계정에게만 보인다.
       // 첫 양식이 휴가신청서이고 옛 /leave 전용 화면은 폐기됐다 — 휴가를 내려면 여기뿐이라 "휴가"로도 찾아야 한다.
       { href: "/approvals", label: "전자결재", icon: MENU_ICON.approvals, menuKey: "approvals", aliases: ["기안", "휴가"] },

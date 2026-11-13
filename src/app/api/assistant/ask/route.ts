@@ -16,6 +16,8 @@ const Body = z.object({
   question: z.string().trim().min(1).max(ASSISTANT_QUESTION_MAX),
   // 화면이 보낼 때 만든 번호 — 질문 번호를 받기 전에 누른 멈춤·마무리가 이 질문을 찾는다(SQL s2_0034).
   clientRef: z.string().uuid().nullish(),
+  // 강도를 올려 다시 묻는 원래 질문 — 그 답을 이력에서 뺀다(2026-11-12).
+  redoOf: z.string().uuid().nullish(),
 });
 
 /**

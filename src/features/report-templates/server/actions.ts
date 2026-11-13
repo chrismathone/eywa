@@ -15,7 +15,9 @@ import { getCurrentUser } from "@/lib/auth/current-user";
 import { readonlyTeacherViewError } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { reportError } from "@/lib/observability/report-error";
-import { BUILTIN_ENGLISH_TEMPLATES, TEMPLATE_SUBJECT, type ReportTemplate } from "../defaults";
+import { BUILTIN_ENGLISH_TEMPLATES, builtinEnglishTemplates, TEMPLATE_SUBJECT, type ReportTemplate } from "../defaults";
+import { getTenantSettings } from "@/features/owner/server/queries";
+import { isModuleEnabled } from "@/lib/modules";
 import { checkTemplateInput } from "../validate";
 
 type Fail = { ok: false; error: string };
@@ -54,6 +56,7 @@ function toTemplate(row: { id: string; name: string; body: string }): ReportTemp
 export async function listMyReportTemplates(): Promise<{ templates: ReportTemplate[]; notice: string | null }> {
   const who = await actor(false);
   if ("ok" in who) return { templates: [...BUILTIN_ENGLISH_TEMPLATES], notice: who.error };
+  const builtins = await getTenantSettings().then((settings) => builtinEnglishTemplates(isModuleEnabled(settings.modules.disabled, "eie"))).catch(() => BUILTIN_ENGLISH_TEMPLATES);
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("report_templates")
@@ -63,11 +66,11 @@ export async function listMyReportTemplates(): Promise<{ templates: ReportTempla
     .eq("subject", TEMPLATE_SUBJECT)
     .order("created_at", { ascending: true });
   if (error) {
-    if (isMissingTable(error)) return { templates: [...BUILTIN_ENGLISH_TEMPLATES], notice: NOT_READY };
+    if (isMissingTable(error)) return { templates: [...builtins], notice: NOT_READY };
     reportError(error, { scope: "report-templates", step: "list" });
-    return { templates: [...BUILTIN_ENGLISH_TEMPLATES], notice: "내 템플릿을 불러오지 못했습니다. 기본 템플릿으로 계속할 수 있습니다." };
+    return { templates: [...builtins], notice: "내 템플릿을 불러오지 못했습니다. 기본 템플릿으로 계속할 수 있습니다." };
   }
-  return { templates: [...BUILTIN_ENGLISH_TEMPLATES, ...(data ?? []).map(toTemplate)], notice: null };
+  return { templates: [...builtins, ...(data ?? []).map(toTemplate)], notice: null };
 }
 
 /** 저장 — id가 있으면 내 템플릿 수정, 없으면 새로 만들기. 기본 템플릿은 고칠 수 없다(복사해서 만든다). */

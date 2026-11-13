@@ -7,12 +7,14 @@ import "server-only";
  * 신원 = 로그인한 본인(`getCurrentUser()` — 강사뷰 X가 아니다). 판정은 세션 GET만 쓴다.
  * 🔴 화면도 이 함수로 단추를 세운다(셸 레이아웃 — 사이드바·폰 위쪽 줄 단추 · 오버레이 · 창 안 단축키) — 화면엔 보이는데 서버가 막거나
  *    그 반대가 되지 않게 판정은 여기 한 곳이다([[#77]]). 권한은 `canAccessTenant`(학원 설정·개인별 권한 반영 — [[#58]]).
- * ⚠️ 비서는 지점 자료 전부를 읽는다(전용 DB 역할 — executor.ts) — 권한을 '담당'·'읽기'로 좁힐 수 없어 칸은 전체·없음만 쓴다(`isOnOffMenu`).
+ * 비서가 읽는 자료는 묻는 사람의 권한 범위 안뿐이다(`scopedViewer` → 증표의 묶음 키 · s2_0096). 권한 칸 자체는 전체·없음만 쓴다(`isOnOffMenu` — 쓰나 마나).
  */
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/current-user";
 import { canAccessTenant } from "@/lib/auth/perm-matrix";
 import { isCurrentUserSuperAdmin } from "@/lib/auth/super-admin";
 import { viewAsTeacher } from "@/lib/auth/view-as";
+import { AssistantError } from "./agent";
+import { viewerScopeKeys } from "./scope";
 import type { Owner } from "./store";
 
 export type AssistantViewer = { user: CurrentUser; owner: Owner };
@@ -29,3 +31,17 @@ export async function assistantViewer(): Promise<AssistantViewer | GateFailure> 
 }
 
 export const isGateFailure = (v: AssistantViewer | GateFailure): v is GateFailure => "error" in v;
+
+/**
+ * 문 + 지금 권한 범위(묶음 키) — 자료를 읽거나 저장된 답을 내보내는 모든 자리가 쓴다(질문 · 대화 다시 열기 · 의견 · 추천 질문).
+ * 🔴 권한을 읽지 못하면 기본값으로 넓히지 않고 멈춘다(Codex 합의 9).
+ */
+export async function scopedViewer(): Promise<(AssistantViewer & { scope: string[] }) | GateFailure> {
+  const viewer = await assistantViewer();
+  if (isGateFailure(viewer)) return viewer;
+  try {
+    return { ...viewer, scope: await viewerScopeKeys(viewer.user) };
+  } catch (error) {
+    return { error: error instanceof AssistantError ? error.message : "권한을 확인하지 못했습니다. 잠시 뒤 다시 물어봐 주세요", status: 503 };
+  }
+}

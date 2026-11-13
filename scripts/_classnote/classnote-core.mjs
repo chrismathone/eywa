@@ -29,9 +29,10 @@ import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { decideRoute, pickRouteClass, ROUTE_BLOCKED_MESSAGE } from "./class-route-decide.mjs";
-import { crossCheckOthers, isClassRouteEligible, resolveClassTargets } from "./classnote-class-route.mjs";
+import { crossCheckOthers, isClassRouteEligible, isMakeupDeliveryEligible, resolveClassTargets } from "./classnote-class-route.mjs";
 import { classRouteHaltReason, haltClassRoute } from "./class-route-halt.mjs";
 import { englishAnchorClass, isMissingTable, loadEnglishClassBoard, resolveEnglishClassTargets } from "./english-class-route.mjs";
+import { isRawModuleEnabled } from "../_shared/module-state.mjs";
 
 /**
  * 🔴 게시 엔진 = **워커 내장(내부 API) 단일 경로**. Cloud Run(edutrix Firebase `submitToClassNoteV2`) 분기는
@@ -176,17 +177,15 @@ export async function isClassnoteSendEnabled(sql, tenant) {
 
 /**
  * 이 학원에 ClassNote 기능(모듈)이 켜져 있나 — 앱 `isModuleEnabled(settings.modules.disabled, "classnote")`와 같은 판정.
- * 저장은 `data.modules.disabled`(끈 것만). 칸이 없으면 프리셋을 따른다: 일반판(`preset:"generic"`)은 전부 꺼진 채
- * 태어나고(GENERIC_DISABLED_MODULES), 그 밖(침산)은 전부 켜짐. 행이 없으면 침산 = 켜짐(앱 resolve와 같은 쪽으로 기운다).
+ * 저장은 `data.modules.disabled`(끈 것만)와 저장 당시 목록 `known`. 일반판은 저장 뒤 추가된 모듈도 끈 것으로 보고,
+ * 칸이 없으면 전부 꺼진 채 태어난다(GENERIC_DISABLED_MODULES). 그 밖(침산)은 `known`을 무시하고 전부 켜며,
+ * 행이 없으면 침산 = 켜짐(앱 resolve와 같은 쪽으로 기운다).
  * 꺼져 있으면 데몬은 이 학원의 ClassNote 일(발송·공지·회수·동기화·피드·읽음)을 **전부** 건너뛴다.
  */
 export async function isClassnoteModuleEnabled(sql, tenant) {
-  const [row] = await sql`select case
-      when jsonb_typeof(data->'modules'->'disabled') = 'array' then (data->'modules'->'disabled') ? 'classnote'
-      else coalesce(data->>'preset', '') = 'generic'
-    end as off
+  const [row] = await sql`select data->'preset' as preset, data->'modules' as modules
     from tenant_settings where tenant_id=${tenant}`;
-  return row?.off !== true;
+  return isRawModuleEnabled(row, "classnote");
 }
 
 /**
@@ -764,9 +763,8 @@ export async function processQueueOnce(sql, browser, opts) {
     let routeClassId = r.class_id ?? null;
     let makeupWriteBack = null; // 보강 반으로 게시했고 적힌 '보낼 반'이 없으면 게시 뒤 그 반을 적는다
     if (decided !== "personal") {
-      // 🔴 원장 2026-09-30: 보고서 반 = 출석부 반 = 발송 반(순수 판정 = class-route-decide.mjs `pickRouteClass`, 앱 sendClassGateRow와 한 규칙).
-      //    정규 = 보고서 반 · 보강 = 보강 반(makeup_class_id). 적힌 '보낼 반'이 보강 반과 다르거나 보드가 없으면 **막는다**
-      //    (다른 반·1인 보드로 흘리지 않는다). 조회 실패는 "대상"으로 둔다 — 아래 대상 확정에서 다시 드러난다(재시도).
+      // 정규는 보고서 반만 사용한다. 보강은 저장된 전달 반이 다르면 수강·과목·배정을 다시 검증한다.
+      // 출결 앵커는 변경하지 않으며 검증되지 않은 반이나 1인 보드로 보내지 않는다.
       const classEligible = r.class_id ? await isClassRouteEligible(sql, tenant, r.class_id, r.student_id).catch(() => true) : false;
       const makeupEligible =
         !r.class_id && r.makeup_class_id
@@ -779,6 +777,9 @@ export async function processQueueOnce(sql, browser, opts) {
         sendClassId: r.classnote_class_id ?? null,
         makeupClassId: r.makeup_class_id ?? null,
         makeupEligible,
+        sendEligible: !r.class_id && r.classnote_class_id && r.classnote_class_id !== r.makeup_class_id
+          ? await isMakeupDeliveryEligible(sql, tenant, r).catch(() => false)
+          : false,
       });
       if (pick.route === "blocked") {
         const msg = ROUTE_BLOCKED_MESSAGE[pick.reason] ?? ROUTE_BLOCKED_MESSAGE.board_missing;
@@ -794,6 +795,7 @@ export async function processQueueOnce(sql, browser, opts) {
         // 적힌 '보낼 반'이 없을 때만 **게시가 끝난 뒤** 이 반을 적는다(아래 success/partial) — 게시 전에 적으면 실패해도 기록이 남는다.
         if (!r.classnote_class_id) makeupWriteBack = pick.classId;
       }
+      if (pick.via === "delivery") log(`  · ${studentName}: 보강 출결을 유지하고 선택한 반으로 보고서 전달`);
     }
     // 영어 반 방 경로(원장 2026-10-29, english-class-route.mjs) — 보고서 반(보강은 보강 반)에 반 방 연결(s2_0006)이 있으면
     // 그 반 방의 이 학생 원아에게 1:1로. 연결이 없는 반은 종전 1인 보드. 표가 없으면(SQL 전) 종전 그대로([[#95]]).

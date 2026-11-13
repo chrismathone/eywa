@@ -5,6 +5,7 @@ import { auditDetail } from "@/features/audit/describe";
 import { AUDIT_ACTIONS, auditActionLabel } from "@/features/audit/server/log";
 import { demoWeekdayGrouping } from "./demo-weekday";
 import { buildScenario, SCENARIOS } from "./plan.mjs";
+import { demoModulesWithNewcomers } from "./demo-modules";
 
 const root = process.cwd();
 const read = (rel: string) => fs.readFileSync(path.join(root, rel), "utf8");
@@ -46,7 +47,7 @@ describe("데모 재원 드롭다운", () => {
     const sw = read("src/app/(shell)/dashboard/_components/demo-roster-switch.tsx");
     expect(sw).toContain('refetchQueries({ queryKey: ["dashboard-overview"], type: "active" })');
     expect(read("src/features/demo-roster/apply.ts")).toContain("insertDashboardSatellite");
-    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain('id !== "newcomers"');
+    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("demoModulesWithNewcomers");
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(tenantSettingsTag(user.tenantId))");
     expect(read("src/features/demo-roster/server/actions.ts")).toContain("updateTag(`dashboard-invoice-trend:${user.tenantId}`)");
     // 청구 추이 캐시는 수납 통계와 한 벌로 `billing-months-server.ts`에 옮겨 갔다(2026-10-22 가드 갱신) —
@@ -56,7 +57,7 @@ describe("데모 재원 드롭다운", () => {
     expect(billingMonths).toContain("tags: [`dashboard-invoice-trend:${tenantId}`]");
     expect(read("src/features/dashboard/overview/server.ts")).toContain('from "./billing-months-server"');
     expect(read("src/features/demo-roster/apply.ts")).toContain("ensureDemoStaff");
-    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("'{profile}'");
+    expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("profile: stored.profile");
     expect(read("src/features/demo-roster/dashboard-apply.ts")).toContain("writeDemoWeekdayGrouping");
     expect(demoWeekdayGrouping("neighborhood")).toBe("mon-wed-fri");
     expect(demoWeekdayGrouping("targetHeavy")).toBe("mon-wed-fri");
@@ -67,11 +68,33 @@ describe("데모 재원 드롭다운", () => {
     expect(queries).toContain('user.systemRole !== "master"');
   });
 
+  it("재원 교체는 신규생 관리만 켜고 다른 모듈과 보강 상태를 보존한다", () => {
+    const existing = demoModulesWithNewcomers({
+      preset: "generic",
+      modules: { disabled: ["shuttle", "eie"], known: ["shuttle", "eie"] },
+    });
+    expect(existing.after).toEqual(existing.before.filter((id) => id !== "newcomers"));
+    expect(existing.after).toContain("shuttle");
+    expect(existing.after).toContain("eie");
+    expect(existing.after).not.toContain("makeups");
+
+    const missing = demoModulesWithNewcomers({ preset: "generic" });
+    expect(missing.after).not.toContain("newcomers");
+    expect(missing.after).not.toContain("makeups");
+    expect(missing.after).toContain("shuttle");
+  });
+
   it("감사 문구는 구성 이름이다", () => {
     expect(AUDIT_ACTIONS.demo_roster_apply).toBe("데모 재원 구성 바꾸기");
     expect(auditActionLabel("demo_roster_apply")).toBe("데모 재원 구성 바꾸기");
     expect(
       auditDetail("demo_roster_apply", { label: "동네형", students: 160 }, { nameOf: () => null, subjectLabel: () => "" }),
     ).toBe("동네형 · 재원 160명");
+  });
+
+  it("감사 metadata에 모듈 변경 전·후를 함께 남긴다", () => {
+    const action = read("src/features/demo-roster/server/actions.ts");
+    expect(action).toContain("modulesBefore: result.modules.before");
+    expect(action).toContain("modulesAfter: result.modules.after");
   });
 });

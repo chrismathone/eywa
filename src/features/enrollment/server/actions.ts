@@ -44,6 +44,7 @@ import { summarizeConsultationChanges } from "@/features/enrollment/consultation
 import { referrerChanged, referrerColumns, referrerColumnsOf, type ReferrerColumns } from "@/features/enrollment/referrer";
 import { readReferrerBefore, referrerLabelOf } from "@/features/enrollment/server/referrer-queries";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { phoneLabel } from "@/lib/format/phone";
 
 // 🔑 행위자 = '다른 강사 뷰'의 대상 직원(`getCurrentUser({ teacherView: true })`, 강사뷰가 아니면 본인) — 상담자 계정(consultant_id)·
 //    녹음한 사람(recorded_by)·빈 상담자 자동 채움·AI 리포트 수정자·배정 알림의 유발자가 대상 명의다(출결 recorded_by와 같은 규약,
@@ -686,7 +687,7 @@ export async function patchConsultationCells(id: string, patch: ConsultationCell
     );
   }
   if (d.prospectGrade !== undefined) row.prospect_grade = d.prospectGrade || null;
-  if (d.parentPhone !== undefined) row.parent_phone = d.parentPhone || null;
+  if (d.parentPhone !== undefined) row.parent_phone = phoneLabel(d.parentPhone);
   if (d.parentRequest !== undefined) row.parent_request = d.parentRequest?.trim() ? d.parentRequest : null;
   if (d.subject !== undefined) {
     if (d.subject) {
@@ -1000,7 +1001,7 @@ export async function convertConsultationToStudent(
       grade: studentGrade,
       school: savedSchool,
       parent_name: overrideParentName ?? c.parent_name,
-      parent_phone: overrideParentPhone ?? c.parent_phone,
+      parent_phone: phoneLabel(overrideParentPhone ?? c.parent_phone),
       status: "enrolled",
       // 🔴 등록일은 **오늘**이지 배정일이 아니다 — 이 칸은 대시보드 '이번 달 신입생'·학원생 증감의 축이라,
       //    배정일을 따라 미래로 밀면 오늘 등록한 학생이 신규 집계에서 조용히 사라진다(원장이 시킨 건

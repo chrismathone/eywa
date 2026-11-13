@@ -8,6 +8,7 @@ import { canWriteSupportRequest } from "../access";
 import { isMissingSupportTables, SUPPORT_NOT_READY } from "../missing";
 import { asSupportStatus, canAuthorEditRequest } from "../types";
 import { logDbError } from "@/lib/supabase/db-error";
+import { phoneLabel } from "@/lib/format/phone";
 
 type Result = { ok: true; id: string } | { error: string };
 
@@ -23,7 +24,7 @@ function cleanForm(form: SupportRequestForm): { ok: true; row: Record<string, st
   const title = (form.title ?? "").trim().slice(0, 120);
   const body = (form.body ?? "").trim();
   if (body.length > 8000) return { error: "내용은 메뉴 참조를 포함해 8,000자까지 입력해 주세요" };
-  const phone = (form.contactPhone ?? "").trim().slice(0, 40);
+  const phone = (phoneLabel(form.contactPhone) ?? "").slice(0, 40);
   const email = (form.contactEmail ?? "").trim().slice(0, 200);
   if (!title || !body) return { error: "제목과 내용을 적어 주세요" };
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "이메일 형식을 확인해 주세요" };

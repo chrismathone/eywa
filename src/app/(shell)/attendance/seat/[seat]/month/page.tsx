@@ -60,7 +60,7 @@ export default async function SeatMonthlyPage({
           title={`${SEAT_NAME[seat]} 월간`}
           description="아직 열지 않은 자리입니다"
           actions={
-            <Link href="/attendance" className="border-line hover:bg-bg-soft rounded-full border px-2.5 py-0.5 text-xs">
+            <Link href="/attendance?list=1" className="border-line hover:bg-bg-soft rounded-full border px-2.5 py-0.5 text-xs">
               출석부로
             </Link>
           }
@@ -105,7 +105,7 @@ export default async function SeatMonthlyPage({
               </Link>
               {/* 출석부를 못 여는 사람(자리 출석부만 받은 아르바이트 등)에겐 그리지 않는다 — 누르면 첫 화면으로 튕긴다(2026-11-05 리뷰). */}
               {canOpenAttendance ? (
-                <Link href="/attendance" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
+                <Link href="/attendance?list=1" className={`${TOOLBAR_CHIP} ${TOOLBAR_CHIP_OFF}`}>
                   출석부로
                 </Link>
               ) : null}

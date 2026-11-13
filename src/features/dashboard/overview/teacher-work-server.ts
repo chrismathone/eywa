@@ -5,7 +5,7 @@ import { fetchAllPaged, fetchAllPagedInChunks, fetchInChunks } from "@/lib/supab
 import { addDays, kstMinutesOfDay, shiftMonth } from "@/lib/date-kst";
 import type { TeacherScope } from "@/lib/auth/teacher-scope";
 import type { TenantSettings } from "@/features/owner/settings-types";
-import { classnoteModuleOn } from "@/features/owner/classnote-gate";
+import { classnoteModuleOn, classnoteSendOn } from "@/features/owner/classnote-gate";
 import { programSubjectsOf, subjectGroupOf } from "@/features/students/enrollment/program";
 import { teacherWork, withTeacherWorkExtras, type WorkClass, type WorkReport } from "./teacher-work";
 import { pickCounselMonth } from "./counsel-period";
@@ -47,8 +47,8 @@ export async function loadTeacherWork(
   const visible = inScope.filter((c) => c.report_optout !== true && (!c.closed_at || c.closed_at >= today));
   const classIds = visible.map((c) => c.id);
   const scopedIds = inScope.map((c) => c.id);
-  // 기능이 꺼진 지점엔 그 줄이 흔적 없이 빠진다 — 발송·읽음은 ClassNote, 원생상담은 직원 평가(포트폴리오 집계 cron과 같은 두 판정).
-  const deliveryShown = classnoteModuleOn(settings);
+  // 기능이 꺼진 지점엔 그 줄이 흔적 없이 빠진다 — 발송·읽음은 ClassNote 실제 발송, 원생상담은 직원 평가(포트폴리오 집계 cron과 같은 두 판정).
+  const deliveryShown = classnoteSendOn(settings);
   // 실험실 판정은 다른 조회와 나란히 돈다(B4) — 원생상담 조회만 그 결과를 기다린다.
   const counselShownP: Promise<boolean> = isModuleEnabled(settings.modules.disabled, "class_review")
     ? isLaboratoryMenuAvailable(tenantId, "class_review").catch(() => false) : Promise.resolve(false);

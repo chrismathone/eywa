@@ -8,6 +8,7 @@ import {
   type ConsultationAudioReport,
 } from "@/features/enrollment/server/queries";
 import { RichText } from "@/components/rich-text";
+import { phoneLabel } from "@/lib/format/phone";
 import { normalizeAiListText } from "@/features/enrollment/report-normalize";
 import { PrintActions } from "./print-actions";
 import { NEUTRAL_ACADEMY_NAME } from "@/features/owner/defaults";
@@ -47,7 +48,7 @@ export default async function EnrollmentPrintPage({
   ]);
   const contactLine = [
     profile.representativeName ? `대표 ${profile.representativeName}` : "",
-    profile.phone,
+    phoneLabel(profile.phone),
     profile.email,
   ]
     .filter(Boolean)
@@ -100,7 +101,7 @@ export default async function EnrollmentPrintPage({
         <Row label="학년 · 학교" value={`${p.prospect.grade ?? "—"} · ${p.prospect.school ?? "—"}`} />
         <Row
           label="학부모"
-          value={`${p.prospect.parentName ?? "—"} (${p.prospect.parentPhone ?? "—"})`}
+          value={`${p.prospect.parentName ?? "—"} (${phoneLabel(p.prospect.parentPhone) ?? "—"})`}
         />
         <Row label="상담일" value={consultedDate} />
         <Row label="상담사" value={p.consultantName ?? "—"} />

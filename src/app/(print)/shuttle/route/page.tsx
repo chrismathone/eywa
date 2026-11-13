@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { phoneLabel } from "@/lib/format/phone";
 import { PrintActions } from "@/app/(print)/enrollment/[id]/print/print-actions";
 import { requireShuttleView } from "@/features/shuttle/server/access";
 import { kstToday, formatKoreanDate } from "@/lib/date-kst";
@@ -110,7 +111,7 @@ export default async function ShuttleRoutePrintPage({
                 {vehicle.driverName && (
                   <span className="ml-2 text-[12px] font-normal">
                     기사 {vehicle.driverName}
-                    {vehicle.driverPhone && ` (${vehicle.driverPhone})`}
+                    {vehicle.driverPhone && ` (${phoneLabel(vehicle.driverPhone)})`}
                   </span>
                 )}
               </h2>

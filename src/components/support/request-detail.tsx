@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { MenuMentionText } from "@/components/menu-mention-text";
 import { fmtSupportDateTime } from "@/features/support/format";
 import { SUPPORT_STATUSES, SUPPORT_STATUS_META, type SupportRequestDetail } from "@/features/support/types";
+import { phoneLabel } from "@/lib/format/phone";
 
 /**
  * 개선요청 상세 본문 — makeedu 상세(제목 · 글쓴이 · 작성일시 · 결과수신 연락처/이메일 · 처리상태 4단계 ·
@@ -21,7 +22,7 @@ export function SupportRequestDetailView({ item, showTenant = false }: { item: S
           <Row label="작성일시">
             <span className="num">{fmtSupportDateTime(item.createdAt)}</span>
           </Row>
-          <Row label="결과수신 연락처">{item.contactPhone || "—"}</Row>
+          <Row label="결과수신 연락처">{phoneLabel(item.contactPhone) || "—"}</Row>
           <Row label="결과수신 이메일">{item.contactEmail || "—"}</Row>
           <Row label="처리상태">
             <StatusSteps current={item.status} />

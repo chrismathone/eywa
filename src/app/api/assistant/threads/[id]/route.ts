@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { logAction } from "@/features/audit/server/log";
-import { assistantViewer, isGateFailure } from "@/features/assistant/server/gate";
+import { assistantViewer, isGateFailure, scopedViewer } from "@/features/assistant/server/gate";
 import { deleteThread, renameThread, THREAD_TITLE_MAX, threadDetail, threadRunning } from "@/features/assistant/server/store";
 import { reportError } from "@/lib/observability/report-error";
 
@@ -19,10 +19,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const viewer = await assistantViewer();
   if (isGateFailure(viewer)) return NextResponse.json({ error: viewer.error }, { status: viewer.status, ...NO_STORE });
   try {
+    // 3초 다시 읽기(도는 중인지만)는 권한 범위를 계산하지 않는다 — 내용이 나가지 않는다.
     if (new URL(request.url).searchParams.get("status") === "1") {
       return NextResponse.json({ running: await threadRunning(viewer.owner, id.data) }, NO_STORE);
     }
-    const detail = await threadDetail(viewer.owner, id.data);
+    const scoped = await scopedViewer();
+    if (isGateFailure(scoped)) return NextResponse.json({ error: scoped.error }, { status: scoped.status, ...NO_STORE });
+    const detail = await threadDetail(viewer.owner, id.data, scoped.scope);
     return detail ? NextResponse.json(detail, NO_STORE) : NextResponse.json({ error: "대화를 찾지 못했습니다" }, { status: 404, ...NO_STORE });
   } catch (error) {
     reportError(error, { scope: "api.assistant.thread", tenantId: viewer.owner.tenantId });
