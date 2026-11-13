@@ -34,9 +34,9 @@ describe("표 순서와 수업별 촬영 대상", () => {
     expect(resolvePhotoTarget(target, [], "2026-11-13")).toBeNull();
     expect(resolvePhotoTarget(target, [{ ...student, subjects: student.subjects.map(s => ({ ...s, classId: "moved" })) }], "2026-11-13")).toBeNull();
   });
-  it("첨부 수·진도·보강·미발송 반과 세션에서 해제한 발송 상태를 반영한다", () => {
+  it("진도 없이 사진을 먼저 받고 첨부 수·보강·미발송 반·발송 잠금은 유지한다", () => {
     expect(photoBlock(rows[0], { draft: "", sent: true, attachments: Array(6).fill({ path: "x", name: "x" }) })).toBe("full");
-    expect(photoBlock({ ...rows[0], subject: { ...rows[0].subject, today: "" } }, undefined)).toBe("progress");
+    expect(photoBlock({ ...rows[0], subject: { ...rows[0].subject, today: "" } }, undefined)).toBeUndefined();
     expect(photoBlock({ ...rows[0], subject: { ...rows[0].subject, splitIn: "other-class" } }, undefined)).toBe("split");
     expect(photoBlock({ ...rows[0], subject: { ...rows[0].subject, reportOptout: true } }, undefined)).toBe("optout");
     expect(photoBlock({ ...rows[0], subject: { ...rows[0].subject, classnoteStatus: "success" } }, { sent: true, draft: "", classnoteStatus: null })).toBeUndefined();

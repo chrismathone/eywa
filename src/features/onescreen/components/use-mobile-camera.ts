@@ -1,34 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
-export function isMobileCameraDevice(nav: Pick<Navigator, "userAgent" | "platform" | "maxTouchPoints" | "mediaDevices">): boolean {
-  const mobile = /Android|iPhone|iPad|iPod/i.test(nav.userAgent)
+export function isMobileCameraDevice(nav: Pick<Navigator, "userAgent" | "platform" | "maxTouchPoints">, touchOnly = false): boolean {
+  const mobile = /Android|iPhone|iPad|iPod/i.test(`${nav.userAgent} ${nav.platform}`)
     || (nav.platform === "MacIntel" && nav.maxTouchPoints > 1); // iPad desktop UA
-  return mobile && typeof nav.mediaDevices?.getUserMedia === "function";
+  // Desktop-site mode can replace both UA and platform. Touch-only input still identifies the phone/tablet.
+  return mobile || (nav.maxTouchPoints > 0 && touchOnly);
 }
 
-/** No permission prompt on page load. Desktop webcams never expose the mobile-only action. */
+const POINTER_QUERIES = ["(any-pointer: coarse)", "(any-pointer: fine)"] as const;
+function subscribeInput(change: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const queries = POINTER_QUERIES.map(query => window.matchMedia(query));
+  queries.forEach(query => query.addEventListener?.("change", change));
+  return () => queries.forEach(query => query.removeEventListener?.("change", change));
+}
+
+function mobileSnapshot() {
+  const touchOnly = typeof window.matchMedia === "function"
+    && window.matchMedia(POINTER_QUERIES[0]).matches && !window.matchMedia(POINTER_QUERIES[1]).matches;
+  return isMobileCameraDevice(navigator, touchOnly);
+}
+const serverSnapshot = () => false;
+
+/** Camera permission/device lists do not determine visibility: mobile browsers also have native file capture. */
 export function useMobileCamera() {
-  const [available, setAvailable] = useState(false);
-  useEffect(() => {
-    if (!isMobileCameraDevice(navigator)) return;
-    let cancelled = false;
-    const devices = navigator.mediaDevices;
-    const check = async () => {
-      let hasCamera = true;
-      try {
-        if (devices.enumerateDevices) {
-          const inputs = await devices.enumerateDevices();
-          // Some mobile browsers omit all devices before permission. Let the explicit button ask.
-          hasCamera = inputs.length === 0 || inputs.some(d => d.kind === "videoinput");
-        }
-      } catch { /* Device enumeration may be hidden until the user opens the camera. */ }
-      if (!cancelled) setAvailable(hasCamera);
-    };
-    void check();
-    devices.addEventListener?.("devicechange", check);
-    return () => { cancelled = true; devices.removeEventListener?.("devicechange", check); };
-  }, []);
-  return available;
+  return useSyncExternalStore(subscribeInput, mobileSnapshot, serverSnapshot);
 }

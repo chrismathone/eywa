@@ -4,8 +4,7 @@ import { issueReportAttachmentUploadTicket, registerReportAttachment } from "../
 import { saveLessonReport } from "../server/actions";
 import { uploadToTicket } from "@/lib/storage/upload-to-ticket";
 import { resizeImageForUpload } from "../resize-image";
-import { isProgressOptionalReport } from "../jj-books";
-import { isRowActionable, rowKey } from "../grid";
+import { effectiveClassnoteStatus, isAlreadySent, rowKey } from "../grid";
 import { READONLY_TEACHER_VIEW_ERROR } from "@/lib/auth/view-as-message";
 import { classIdFor, extFromType, subjectKeyFor } from "../attachment-row";
 import type { ReportsState } from "../session-input";
@@ -19,15 +18,12 @@ import type { useSheetT, useSheetTf } from "@/features/teacher-view/lang-context
  * 훅 렌더마다 지금 값으로 함수를 만든다(예전 closure 그대로). 🔴 파일별 **순차**(발급 → 올리기 → 등록 — 병렬화 없음).
  */
 export function makeAddAttachmentsFor({
-  reports,
   reportsRef,
   date,
   readonlyView,
   classnoteOn,
   i18n: { t, tf },
   save: {
-    englishRowFlags,
-    confirmEnglishOutput,
     refreshJjBeforeOutput,
     buildSaveInputFor,
     latestStudent,
@@ -62,18 +58,15 @@ export function makeAddAttachmentsFor({
       if (!opts?.silent) toast.error(READONLY_TEACHER_VIEW_ERROR); // 일괄(bulkAttach)은 진입부가 이미 알렸다
       return 0;
     }
-    // 미저장 첨부는 buildSaveInput으로 보고서 행을 먼저 만든다 — 진도 없으면 빈 보고서가 생기므로 게이트(#15).
+    // 사진은 진도·평가·멘트보다 먼저 붙일 수 있다. 행/발송 잠금만 확인하고 초안으로 보관한다.
     const su0 = student.subjects.find((s) => s.name === subjectName);
-    if (su0 && !reports[student.id]?.[subjectName]?.sent && !isRowActionable(su0, "save", undefined, { progressOptional: isProgressOptionalReport(su0, reports[student.id]?.[subjectName]) })) {
-      if (!opts?.silent) toast.message(t("os.c.attachNeedProgress"));
+    if (!su0) {
+      if (!opts?.silent) toast.error(t("os.c.attachNoInfo"));
       return 0;
     }
-    // 영어 행 — 첫 첨부는 지금 글로 보고서를 자동 저장한다(저장된 글은 학부모 링크·인쇄에 그대로 보인다). 글이 고치기 전
-    // 값을 담고 있으면 발송·저장과 같은 판정으로 묻고, 일괄(조용히)은 그 행을 건너뛴다(요약의 '건너뜀'에 잡힌다).
-    if (!reports[student.id]?.[subjectName]?.sent && su0?.subjectKey === "english") {
-      if (opts?.silent) {
-        if (englishRowFlags(student, su0, reportsRef.current[student.id]?.[subjectName]).outdated) return 0;
-      } else if (!confirmEnglishOutput(student, su0, "os.tpl.outdatedSave")) return 0;
+    if (su0.splitIn || isAlreadySent(effectiveClassnoteStatus(reportsRef.current[student.id]?.[subjectName]?.classnoteStatus, su0.classnoteStatus))) {
+      if (!opts?.silent) toast.message(t(su0.splitIn ? "os.photo.block.split" : "os.row.attachSent"));
+      return 0;
     }
     const studentId = student.id;
     const subject = subjectKeyFor(student, subjectName);
@@ -82,7 +75,7 @@ export function makeAddAttachmentsFor({
     try {
       // 첨부 먼저 UX — 미저장 상태면 현재 초안으로 자동저장해 보고서 행을 먼저 만든다(첨부는 저장된 행에만).
       // 수동 '저장' 클릭을 없앨 뿐 결과는 "저장 후 첨부"와 동일(진짜 저장된 행).
-      if (!reports[studentId]?.[subjectName]?.sent) {
+      if (!reportsRef.current[studentId]?.[subjectName]?.sent) {
         const waited = await refreshJjBeforeOutput(student, subjectName);
         const built = buildSaveInputFor(waited ? latestStudent(student, subjectName) : student, subjectName);
         if (!built) {

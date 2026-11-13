@@ -1,10 +1,9 @@
 import { REPORT_ATTACHMENT_MAX } from "./attachment-utils";
-import { effectiveClassnoteStatus, isAlreadySent, isRowActionable, rowClassName, type GridRow } from "./grid";
-import { isProgressOptionalReport } from "./jj-books";
+import { effectiveClassnoteStatus, isAlreadySent, rowClassName, type GridRow } from "./grid";
 import type { SubjectReport } from "./components/report-card";
 import type { OneScreenStudent } from "./types";
 
-export type PhotoBlock = "locked" | "absent" | "optout" | "split" | "full" | "progress" | "changed";
+export type PhotoBlock = "locked" | "absent" | "optout" | "split" | "full" | "changed";
 export type PhotoTarget = {
   key: string;
   studentId: string;
@@ -31,7 +30,6 @@ export function photoBlock(row: GridRow, rep: SubjectReport | undefined): PhotoB
   if (row.subject.reportOptout) return "optout";
   if (row.subject.splitIn) return "split";
   if ((rep?.attachments?.length ?? 0) >= REPORT_ATTACHMENT_MAX) return "full";
-  if (!rep?.sent && !isRowActionable(row.subject, "save", status ?? "", { progressOptional: isProgressOptionalReport(row.subject, rep) })) return "progress";
 }
 
 /** Include blocked rows as named slots; skipping one must never shift the next student's photo. */
