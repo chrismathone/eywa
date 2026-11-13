@@ -8,6 +8,7 @@ import { resolveModelChain } from "./models";
  * **AI 1순위는 Claude · OpenAI는 폴백만** — 원장 2026-11-12 *"CLAUDE를 메인으로, 폴백은 GPT로"*.
  * 기능 코드가 OpenAI을 먼저 고르는 자리(`provider: "openai"` · 매개변수 기본값 · 인자로 넘기기)가 다시 생기면 실패한다.
  * 지점마다 다른 모델은 운영 콘솔 'AI 모델' 탭(`tenant_ai_models`)이 고른다 — 코드 기본은 Claude다.
+ * 승인된 예외(원장 2026-11-13) = 학원 비서는 Terra low 전용이다. 그 실행기의 사용량 기록만 좁게 허용한다.
  */
 const ROOT = process.cwd();
 function sources(dir: string, out: string[] = []): string[] {
@@ -21,7 +22,7 @@ function sources(dir: string, out: string[] = []): string[] {
 const OPENAI_FIRST = [/provider:\s*["']openai["']/, /AiProvider\s*=\s*["']openai["']/, /,\s*["']openai["']\s*,\s*\{/];
 
 describe("AI 1순위 = Claude · OpenAI는 폴백(2026-11-12)", () => {
-  it("기능 코드(src/lib/ai 밖)에 OpenAI을 먼저 고르는 자리가 없다", () => {
+  it("기능 코드 기본은 Claude다 — 승인된 학원 비서의 OpenAI 사용량 기록만 예외", () => {
     const hits = sources(join(ROOT, "src"))
       .filter((f) => !f.startsWith("src/lib/ai/"))
       .flatMap((f) =>
@@ -30,6 +31,7 @@ describe("AI 1순위 = Claude · OpenAI는 폴백(2026-11-12)", () => {
           .map((line, i) => ({ f, no: i + 1, line }))
           .filter(({ line }) => OPENAI_FIRST.some((re) => re.test(line))),
       )
+      .filter(({ f, line }) => !(f === "src/features/assistant/server/ask.ts" && /recordUsage\(\{ meta: \{ tenantId: owner\.tenantId, feature: "academy_assistant" \}, provider: "openai", model[,:]/.test(line)))
       .map(({ f, no, line }) => `${f}:${no}  ${line.trim().slice(0, 100)}`);
     expect(hits).toEqual([]);
   });
