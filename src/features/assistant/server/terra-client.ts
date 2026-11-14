@@ -46,7 +46,7 @@ function messageOf(response: Response): AssistantMessage {
 
 /**
  * Responses ↔ 기존 실행기의 작은 어댑터. 저장된 보고서/DB 도구/진행 이벤트/검사·재작성 흐름은 유지한다.
- * 네트워크는 Terra low 한 곳만 호출한다. 암호화된 reasoning을 포함한 원래 output을 다음 도구 차례에 그대로 돌려준다.
+ * 네트워크는 Terra low 한 곳만 호출한다. 암호화된 reasoning을 보존하고 SDK 파싱 보조 필드를 뺀 output을 다음 도구 차례에 돌려준다.
  */
 export function createTerraClient(client: Pick<OpenAI, "responses">): AssistantClient {
   const nativeOutputs = new WeakMap<object, ResponseInputItem[]>();
@@ -102,7 +102,19 @@ export function createTerraClient(client: Pick<OpenAI, "responses">): AssistantC
         if (response.status === "failed" || response.status === "cancelled") throw new Error("AI 응답을 끝까지 받지 못했습니다");
         const continuation: ResponseInputItem[] = [];
         for (const item of response.output) {
-          if (item.type === "function_call" || item.type === "reasoning" || item.type === "message") continuation.push(item);
+          // finalResponse()는 API 원문에 parsed_arguments·content[].parsed를 붙인다.
+          // 그대로 재전송하면 두 번째 차례가 400으로 끝난다 — 요청에 허용된 필드만 옮긴다.
+          if (item.type === "function_call") {
+            const { type, id, call_id, name, arguments: args, status, namespace } = item;
+            continuation.push({ type, id, call_id, name, arguments: args, status, namespace });
+          } else if (item.type === "message") {
+            const { type, id, role, status, phase } = item;
+            continuation.push({ type, id, role, status, phase, content: item.content.map(part => {
+              if (part.type === "refusal") return { type: part.type, refusal: part.refusal };
+              const { type, text, annotations, logprobs } = part;
+              return { type, text, annotations, logprobs };
+            }) });
+          } else if (item.type === "reasoning") continuation.push(item);
           else throw new Error("학원 비서가 지원하지 않는 응답을 받았습니다");
         }
         nativeOutputs.set(currentMessage.content,continuation);

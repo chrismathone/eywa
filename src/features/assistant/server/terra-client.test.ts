@@ -1,5 +1,6 @@
+// @vitest-environment node
 import type Anthropic from "@anthropic-ai/sdk";
-import type OpenAI from "openai";
+import OpenAI from "openai";
 import type { Response, ResponseCreateParamsBase, ResponseOutputItem, ResponseStreamEvent, ResponseUsage } from "openai/resources/responses/responses";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assistantKeyEnv, createTerraClient, terraUsage } from "./terra-client";
@@ -22,10 +23,35 @@ function fake(scripts: Array<{ response: Response; events?: ResponseStreamEvent[
   });
   return { client: createTerraClient({ responses: { stream } } as unknown as Pick<OpenAI, "responses">), calls };
 }
+/** HTTP만 대체한다. finalResponse()의 parsed_arguments·parsed 추가와 요청 직렬화는 실제 SDK를 통과한다. */
+function realSdk(responses: Response[]) {
+  const calls: Array<{ params: ResponseCreateParamsBase }> = [];
+  const client = new OpenAI({
+    apiKey: "test-only", maxRetries: 0,
+    fetch: async (_url, init) => {
+      const params = JSON.parse(String(init?.body)) as ResponseCreateParamsBase;
+      calls.push({ params });
+      for (const [index, item] of (Array.isArray(params.input) ? params.input : []).entries()) {
+        const field = "parsed_arguments" in item ? `input[${index}].parsed_arguments`
+          : item.type === "message" && Array.isArray(item.content) && item.content.some(part => "parsed" in part)
+            ? `input[${index}].content.parsed` : null;
+        if (field) return new globalThis.Response(JSON.stringify({ error: { message: `Unknown parameter: '${field}'.`, type: "invalid_request_error", param: field, code: "unknown_parameter" } }), { status: 400, headers: { "Content-Type": "application/json" } });
+      }
+      const next = responses.shift();
+      if (!next) throw new Error("예정된 SDK 응답이 없습니다");
+      const events: ResponseStreamEvent[] = [
+        { type: "response.created", response: { ...next, status: "in_progress", output: [] }, sequence_number: 0 },
+        { type: "response.completed", response: next, sequence_number: 1 },
+      ];
+      return new globalThis.Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } });
+    },
+  });
+  return { client: createTerraClient(client), calls };
+}
 afterEach(() => vi.unstubAllEnvs());
 
 describe("비서 전용 Terra low 연결", () => {
-  it("실제 실행기에서 조회→잘못된 보고서→같은 Terra 재작성까지 도구 결과·대상을 이어 준다", async () => {
+  it("실제 SDK·실행기에서 표 구조→조회→잘못된 보고서→같은 Terra 재작성까지 이어 준다", async () => {
     const student = "11111111-1111-4111-8111-111111111111";
     const render = (args: string, id: string) => ({ ...call(args), id, call_id: id, name: "render_report" });
     const report = { title: "학생 명단", blocks: [
@@ -33,20 +59,33 @@ describe("비서 전용 Terra low 연결", () => {
       { type: "table", title: "수학만 듣는 학생", query: "q1", columns: [{ column: "학생", label: "이름", link: { entity: "student", idColumn: "student_id" } }, ...["학교", "학년", "반", "담당"].map(column => ({ column, label: column }))] },
       { type: "advice", items: [{ action: "미배정 반의 담당을 정해 주세요", why: "A반의 현재 담당은 미배정입니다" }] },
     ] };
-    const { client, calls } = fake([
-      { response: response([call('{"purpose":"학생 명단","sql":"select id as student_id, name as 학생 from students"}')]) },
-      { response: response([render('{"title":', "bad")]) },
-      { response: response([render(JSON.stringify(report), "fixed")]) },
+    const { client, calls } = realSdk([
+      response([{ type: "reasoning", id: "rs1", summary: [], encrypted_content: "opaque-test-only" }, { ...call('{"tables":["students"]}'), name: "describe_table", id: "describe1", call_id: "describe1" }]),
+      response([call('{"purpose":"학생 명단","sql":"select id as student_id, name as 학생 from students"}')]),
+      response([render('{"title":', "bad")]),
+      response([render(JSON.stringify(report), "fixed")]),
     ]);
     const out = await runAssistantAgent({ client, question: "수학만 듣는 학생 명단", history: [], docs: [], emit: () => {}, onUsage: () => {}, now: () => Date.parse("2026-11-13T01:00:00Z"), db: {
       views: async () => new Set(["students"]), describe: async () => [],
       run: async () => ({ columns: ["student_id", "학생", "학교", "학년", "반", "담당"], rows: [{ student_id: student, 학생: "민수", 학교: "가초", 학년: "초5", 반: "A반", 담당: "미배정" }], rowCount: 1, truncated: false, ms: 1 }),
     } });
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
     expect(calls.every(c => c.params.model === "gpt-6.1-terra" && c.params.reasoning?.effort === "low")).toBe(true);
-    expect(calls[2]!.params.input).toEqual(expect.arrayContaining([expect.objectContaining({ type: "function_call_output", call_id: "bad", output: expect.stringContaining("보고서를 고쳐") })]));
+    expect(calls[3]!.params.input).toEqual(expect.arrayContaining([expect.objectContaining({ type: "function_call_output", call_id: "bad", output: expect.stringContaining("보고서를 고쳐") })]));
     expect(out.report.datasets.q1?.rows[0]?.student_id).toBe(student);
     expect(out.report.blocks[1]).toMatchObject({ type: "table", columns: expect.arrayContaining([{ column: "담당", label: "담당" }]) });
+  });
+
+  it("실제 SDK가 본문에 붙인 parsed도 빼고 암호화 reasoning·phase·도구 원문을 보존한다", async () => {
+    const output: ResponseOutputItem[] = [
+      { type: "reasoning", id: "rs1", summary: [], encrypted_content: "opaque-test-only" },
+      { type: "message", id: "msg1", role: "assistant", status: "completed", phase: "commentary", content: [{ type: "output_text", text: "자료를 확인하겠습니다.", annotations: [] }] },
+      call(),
+    ];
+    const { client, calls } = realSdk([response(output), response([])]);
+    const first = await client.messages.stream(params).finalMessage();
+    await client.messages.stream({ ...params, messages: [...params.messages, { role: "assistant", content: first.content }, { role: "user", content: [{ type: "tool_result", tool_use_id: "call1", content: '{"rows":1}' }] }] }).finalMessage();
+    expect(calls[1]!.params.input).toEqual([{ role: "user", content: "원생 현황?" }, ...output, { type: "function_call_output", call_id: "call1", output: '{"rows":1}' }]);
   });
 
   it("외부 모델/강도 대신 Terra low와 Responses 도구만 보내고 결과를 기존 실행기에 돌려준다", async () => {
