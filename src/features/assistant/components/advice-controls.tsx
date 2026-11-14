@@ -225,13 +225,14 @@ const VERDICT_TONE: Record<NonNullable<AdviceView["result"]>["verdict"], string>
   unknown: TONE_SOFT.inert,
 };
 
-/** 확인 지표 한 줄 — 기준값과 그 기간 · 좋아지는 쪽 · 다시 잴 날 또는 결과. 잴 수 없는 의견은 까닭. */
+/** 확인 지표 한 줄 — 기준값과 그 기간 · 좋아지는 쪽 · 다시 잴 날 또는 결과. 일반 의견의 지표 없는 사유는 표시하지 않는다. */
 function CheckLine({ view }: { view: AdviceView }) {
   const c = view.check;
   if (!c) {
     if (!view.noCheck) return null;
     const server = view.noCheck === NO_CHECK_GIVEN || view.noCheck === CHECK_FAILED || view.noCheck === CHECK_SKIPPED;
-    return <p className="text-sm break-words">{server ? `확인 지표 없음 — ${view.noCheck}` : `숫자로 다시 재기 어려운 의견입니다 — ${view.noCheck}`}</p>;
+    if (!server) return null;
+    return <p className="text-sm break-words">확인 지표 없음 — {view.noCheck}</p>;
   }
   const b = c.baseline;
   const r = view.result;

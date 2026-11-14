@@ -199,8 +199,11 @@ describe("비서 의견 처리", () => {
     expect(screen.getByText("보류")).toBeInTheDocument();
   });
 
-  it("잴 수 없는 의견은 까닭 한 줄", () => {
-    render(<AdviceStatusPanel initial={fresh({ check: null, noCheck: "사람을 뽑는 일입니다" })} />);
-    expect(screen.getByText("숫자로 다시 재기 어려운 의견입니다 — 사람을 뽑는 일입니다")).toBeInTheDocument();
+  it("일반 의견에는 지표가 없는 사유를 반복하지 않고 처리 버튼을 보여 준다", () => {
+    render(<AdviceStatusPanel initial={fresh({ check: null, noCheck: "명단을 바탕으로 상담 일정과 담당을 조율하는 일입니다." })} />);
+    expect(screen.queryByText(/숫자로 다시 재기 어려운/)).toBeNull();
+    expect(screen.queryByText(/명단을 바탕으로 상담 일정과 담당/)).toBeNull();
+    expect(screen.getByRole("button", { name: "채택" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "완료" })).toBeInTheDocument();
   });
 });
